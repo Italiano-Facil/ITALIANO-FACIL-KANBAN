@@ -3,94 +3,526 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login - CRM Italiano Fácil</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  
+  <title>Login — Italiano Fácil CRM</title>
+
+  <!-- Font (mesma vibe premium do CRM) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Icons (Phosphor, igual CRM) -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
   <style>
-    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-    body {
-      font-family: "Inter", sans-serif;
-      background-color: #f3f4f6;
-      background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
-      background-size: 20px 20px;
+    :root{
+      --bg: #0b0f14;
+      --panel: rgba(18, 24, 33, 0.78);
+      --panel-strong:#121821;
+      --border: rgba(255,255,255,0.08);
+      --border-2: rgba(255,255,255,0.10);
+
+      --brand: #16a34a;
+      --brand-2:#22c55e;
+      --danger:#ef4444;
+
+      --text:#eaf0f7;
+      --muted:#9aa7b4;
+
+      --shadow-sm: 0 6px 18px rgba(0,0,0,.25);
+      --shadow-md: 0 16px 38px rgba(0,0,0,.35);
+      --shadow-xl: 0 26px 70px rgba(0,0,0,.45);
+
+      --radius-xl: 22px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+
+      --glass: blur(12px);
+    }
+
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    body{
+      font-family:'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 800px at 15% 10%, rgba(34,197,94,.15), transparent 60%),
+        radial-gradient(900px 700px at 85% 12%, rgba(239,68,68,.10), transparent 58%),
+        radial-gradient(900px 800px at 55% 90%, rgba(59,130,246,.10), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      -webkit-font-smoothing: antialiased;
+      overflow:hidden;
+    }
+
+    /* floating noise dots */
+    .grid-dots{
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 22px 22px;
+      opacity: .35;
+      pointer-events:none;
+      mask-image: radial-gradient(800px 500px at 50% 40%, black 55%, transparent 100%);
+      -webkit-mask-image: radial-gradient(800px 500px at 50% 40%, black 55%, transparent 100%);
+    }
+
+    .wrap{
+      width: min(980px, 100%);
+      display:grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+      position:relative;
+      z-index:1;
+    }
+
+    .hero{
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border);
+      background: rgba(18,24,33,0.58);
+      backdrop-filter: var(--glass);
+      -webkit-backdrop-filter: var(--glass);
+      box-shadow: var(--shadow-md);
+      padding: 22px 22px 18px;
+      overflow:hidden;
+      position:relative;
+      min-height: 420px;
+    }
+
+    .hero::before{
+      content:"";
+      position:absolute;
+      inset:-1px;
+      border-radius: var(--radius-xl);
+      background: linear-gradient(135deg, rgba(34,197,94,0.20), rgba(239,68,68,0.10), rgba(59,130,246,0.10));
+      opacity:.45;
+      pointer-events:none;
+      filter: blur(18px);
+    }
+
+    .hero-inner{
+      position:relative;
+      z-index:1;
+      height:100%;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      gap: 18px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:10px 10px;
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      box-shadow: var(--shadow-sm);
+      width: fit-content;
+    }
+
+    .brand img{
+      width:42px; height:42px; border-radius: 14px; object-fit:cover;
+      border:1px solid rgba(255,255,255,0.15);
+    }
+    .brand .name{
+      display:flex; flex-direction:column; line-height:1.15;
+    }
+    .brand .name strong{ font-size:14px; letter-spacing:-.2px; }
+    .brand .name span{ font-size:12px; color:var(--muted); font-weight:700; }
+
+    .hero h1{
+      font-size: 26px;
+      letter-spacing: -.6px;
+      font-weight: 1000;
+      line-height: 1.08;
+    }
+    .hero p{
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.5;
+      max-width: 46ch;
+      margin-top: 10px;
+    }
+
+    .bullets{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .bullet{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      padding: 12px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+    }
+    .bullet i{
+      font-size: 18px;
+      color: rgba(255,255,255,0.9);
+      margin-top: 1px;
+    }
+    .bullet .t{
+      font-weight: 900;
+      font-size: 13px;
+      line-height:1.2;
+    }
+    .bullet .d{
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 12px;
+      margin-top: 3px;
+      line-height:1.35;
+    }
+
+    .footnote{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding-top: 10px;
+      border-top: 1px dashed rgba(255,255,255,0.10);
+      color: rgba(154,167,180,0.95);
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .pill{
+      font-size:11px;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid rgba(34,197,94,0.25);
+      background: rgba(22,163,74,0.12);
+      color: #a7f3d0;
+      font-weight:900;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      white-space:nowrap;
+    }
+
+    /* Right card (login) */
+    .card{
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border);
+      background: rgba(18,24,33,0.72);
+      backdrop-filter: var(--glass);
+      -webkit-backdrop-filter: var(--glass);
+      box-shadow: var(--shadow-xl);
+      padding: 20px;
+      position:relative;
+      overflow:hidden;
+      min-height: 420px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+
+    .card::after{
+      content:"";
+      position:absolute;
+      right:-120px;
+      top:-120px;
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle at 30% 30%, rgba(34,197,94,0.22), transparent 60%);
+      filter: blur(6px);
+      pointer-events:none;
+    }
+
+    .card-head{
+      margin-bottom: 14px;
+      position:relative;
+      z-index:1;
+    }
+    .card-head h2{
+      font-weight: 1000;
+      letter-spacing: -.5px;
+      font-size: 18px;
+    }
+    .card-head p{
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 12px;
+      margin-top: 6px;
+      line-height:1.4;
+    }
+
+    form{
+      display:flex;
+      flex-direction:column;
+      gap: 12px;
+      position:relative;
+      z-index:1;
+    }
+
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap: 8px;
+    }
+    label{
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 1000;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .input{
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.25);
+      color: var(--text);
+      font-weight: 800;
+      font-size: 13px;
+      outline:none;
+      transition: .18s ease;
+    }
+    .input:focus{
+      border-color: rgba(34,197,94,0.40);
+      box-shadow: 0 0 0 4px rgba(22,163,74,0.16);
+      background: rgba(0,0,0,0.35);
+    }
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      flex-wrap:wrap;
+      margin-top: 2px;
+    }
+
+    .link{
+      border:none;
+      background: transparent;
+      color: #fecaca;
+      font-weight: 1000;
+      font-size: 12px;
+      cursor:pointer;
+      padding: 6px 8px;
+      border-radius: 10px;
+      transition:.16s ease;
+    }
+    .link:hover{
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.20);
+    }
+
+    .btn{
+      padding: 12px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      font-weight: 1000;
+      font-size: 13px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      transition:.18s ease;
+      margin-top: 4px;
+    }
+    .btn:hover{
+      transform: translateY(-1px);
+      border-color: rgba(255,255,255,0.18);
+      box-shadow: var(--shadow-sm);
+    }
+    .btn.primary{
+      background: linear-gradient(135deg, rgba(22,163,74,1), rgba(34,197,94,1));
+      border-color: rgba(34,197,94,0.5);
+      box-shadow: 0 16px 40px rgba(22,163,74,0.18);
+    }
+    .btn.primary:hover{ box-shadow: 0 22px 55px rgba(22,163,74,0.22); }
+    .btn:disabled{
+      opacity:.7;
+      cursor:not-allowed;
+      transform:none;
+    }
+
+    .msg{
+      margin-top: 10px;
+      padding: 12px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+      font-weight: 900;
+      font-size: 12px;
+      color: var(--muted);
+      display:none;
+      position:relative;
+      z-index:1;
+      line-height: 1.45;
+    }
+    .msg.error{
+      display:block;
+      border-color: rgba(239,68,68,0.25);
+      background: rgba(239,68,68,0.10);
+      color:#fecaca;
+    }
+    .msg.success{
+      display:block;
+      border-color: rgba(34,197,94,0.25);
+      background: rgba(22,163,74,0.12);
+      color:#bbf7d0;
+    }
+
+    .fineprint{
+      margin-top: 14px;
+      color: rgba(154,167,180,0.95);
+      font-weight: 800;
+      font-size: 11px;
+      line-height:1.45;
+      position:relative;
+      z-index:1;
+    }
+
+    @media (max-width: 920px){
+      .wrap{ grid-template-columns: 1fr; }
+      .hero{ display:none; }
+      .card{ min-height: unset; }
+      body{ padding: 14px; }
     }
   </style>
 </head>
 
-<body class="min-h-screen flex items-center justify-center p-4">
-  <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border-t-4 border-green-600">
+<body>
+  <div class="grid-dots" aria-hidden="true"></div>
 
-    <div class="flex justify-center mb-8">
-      <img
-        src="https://italianofacil.com/wp-content/uploads/2023/01/logo-1-1-9-Italiano-Facil-1024x442.png"
-        alt="CRM Italiano Fácil Logo"
-        class="h-16 object-contain"
-      />
-    </div>
+  <div class="wrap">
+    <!-- LEFT: hero / info -->
+    <section class="hero">
+      <div class="hero-inner">
+        <div>
+          <div class="brand">
+            <img
+              src="https://yt3.googleusercontent.com/ytc/AIdro_kIWkboEldMTw0Ct6jlGbIWWO4uluFUN4OOKDTXTiytCRA=s900-c-k-c0x00ffffff-no-rj"
+              alt="Italiano Fácil"
+            />
+            <div class="name">
+              <strong>Italiano Fácil CRM</strong>
+              <span>Leads • Kanban • Métricas</span>
+            </div>
+          </div>
 
-    <h2 class="text-2xl font-bold text-center text-gray-800 mb-2">Bem-vindo(a) ao CRM</h2>
-    <p class="text-center text-gray-500 mb-8 text-sm">Acesse sua conta para gerenciar seus leads.</p>
+          <div style="margin-top:16px;">
+            <h1>Entre para acompanhar seu funil com clareza e ritmo.</h1>
+            <p>
+              Tudo no mesmo lugar: etapas, responsáveis, tempo por lead (SLA),
+              exportações e relatórios — com o mesmo visual premium do painel.
+            </p>
 
-    <form id="login-form" class="space-y-6">
-      <div>
-        <label for="email" class="block text-sm font-medium text-gray-700">E-mail</label>
-        <div class="mt-1">
+            <div class="bullets">
+              <div class="bullet">
+                <i class="ph ph-kanban"></i>
+                <div>
+                  <div class="t">Kanban com arrastar e soltar</div>
+                  <div class="d">Movimente leads entre etapas em segundos.</div>
+                </div>
+              </div>
+
+              <div class="bullet">
+                <i class="ph ph-timer"></i>
+                <div>
+                  <div class="t">SLA e alertas visuais</div>
+                  <div class="d">Identifique atrasos antes de virar problema.</div>
+                </div>
+              </div>
+
+              <div class="bullet">
+                <i class="ph ph-chart-bar"></i>
+                <div>
+                  <div class="t">Dashboard e relatórios</div>
+                  <div class="d">Acompanhe conversão e produtividade.</div>
+                </div>
+              </div>
+
+              <div class="bullet">
+                <i class="ph ph-lock"></i>
+                <div>
+                  <div class="t">Acesso por conta</div>
+                  <div class="d">Sessão protegida com Supabase Auth.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footnote">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="ph ph-shield-check"></i>
+            <span>Acesso restrito • uso interno</span>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: login card -->
+    <section class="card" aria-label="Login">
+      <div class="card-head">
+        <h2>Bem-vindo(a) ao CRM</h2>
+        <p>Entre com seu e-mail e senha para gerenciar seus leads.</p>
+      </div>
+
+      <form id="login-form" autocomplete="on">
+        <div class="field">
+          <label for="email"><i class="ph ph-envelope-simple"></i> E-mail</label>
           <input
             id="email"
             name="email"
             type="email"
+            class="input"
             required
             autocomplete="email"
             placeholder="seu@email.com"
-            class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
           />
         </div>
-      </div>
 
-      <div>
-        <div class="flex items-center justify-between">
-          <label for="password" class="block text-sm font-medium text-gray-700">Senha</label>
-          <button
-            type="button"
-            id="forgot-password"
-            class="text-xs font-medium text-red-600 hover:text-red-500"
-          >
-            Esqueceu a senha?
-          </button>
-        </div>
-        <div class="mt-1">
+        <div class="field">
+          <div class="row">
+            <label for="password"><i class="ph ph-lock-key"></i> Senha</label>
+            <button type="button" id="forgot-password" class="link">Esqueceu a senha?</button>
+          </div>
           <input
             id="password"
             name="password"
             type="password"
+            class="input"
             required
             autocomplete="current-password"
             placeholder="••••••••"
-            class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
           />
         </div>
-      </div>
 
-      <div>
-        <button
-          id="submit-btn"
-          type="submit"
-          class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-        >
-          Entrar no CRM
+        <button id="submit-btn" class="btn primary" type="submit">
+          <i class="ph ph-sign-in"></i> Entrar no CRM
         </button>
-      </div>
-    </form>
 
-    <div id="error-message" class="hidden mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 text-center"></div>
-    <div id="success-message" class="hidden mt-4 p-3 bg-green-50 text-green-800 text-sm rounded-lg border border-green-200 text-center"></div>
+        <div id="error-message" class="msg error" style="display:none;"></div>
+        <div id="success-message" class="msg success" style="display:none;"></div>
 
+
+      </form>
+    </section>
   </div>
 
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-    // dados do Supabase
+    // Supabase (igual ao CRM)
     const SUPABASE_URL = "https://jzeodgbaquiwgnbnjwkw.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZW9kZ2JhcXVpd2duYm5qd2t3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxOTA5ODQsImV4cCI6MjA4Nzc2Njk4NH0.WtB6dRdhbKXHnH2KOZ3_qUenXU_5mchWfrA2936AzwA";
 
@@ -102,35 +534,50 @@
     const submitBtn = document.getElementById("submit-btn");
     const forgotBtn = document.getElementById("forgot-password");
 
+    // ✅ Ajuste aqui se você quiser apontar para outro lugar
+    // Ideal: "./index.html"
+    const DASHBOARD_URL = "./index.html";
+
     function setLoading(isLoading) {
       submitBtn.disabled = isLoading;
-      submitBtn.classList.toggle("opacity-70", isLoading);
-      submitBtn.classList.toggle("cursor-not-allowed", isLoading);
-      submitBtn.textContent = isLoading ? "Entrando..." : "Entrar no CRM";
+      submitBtn.innerHTML = isLoading
+        ? '<i class="ph ph-circle-notch ph-spin"></i> Entrando...'
+        : '<i class="ph ph-sign-in"></i> Entrar no CRM';
+    }
+
+    function hideMsgs() {
+      errorMessage.style.display = "none";
+      successMessage.style.display = "none";
+      errorMessage.textContent = "";
+      successMessage.textContent = "";
     }
 
     function showError(msg) {
-      successMessage.classList.add("hidden");
-      errorMessage.classList.remove("hidden");
+      successMessage.style.display = "none";
+      errorMessage.style.display = "block";
       errorMessage.textContent = msg;
     }
 
     function showSuccess(msg) {
-      errorMessage.classList.add("hidden");
-      successMessage.classList.remove("hidden");
+      errorMessage.style.display = "none";
+      successMessage.style.display = "block";
       successMessage.textContent = msg;
     }
 
     // ✅ Se já estiver logado, manda direto pro dashboard
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData?.session) {
-      window.location.href = "https://italiano-facil.github.io/ITALIANO-FACIL-KANBAN/";
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session) {
+        window.location.href = DASHBOARD_URL;
+      }
+    } catch (err) {
+      // não bloqueia UI
+      console.warn("Falha ao checar sessão:", err);
     }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      errorMessage.classList.add("hidden");
-      successMessage.classList.add("hidden");
+      hideMsgs();
 
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
@@ -143,15 +590,11 @@
       try {
         setLoading(true);
 
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
-          // Mensagens mais amigáveis
           const msg =
-            error.message?.toLowerCase().includes("invalid login credentials")
+            (error.message || "").toLowerCase().includes("invalid login credentials")
               ? "E-mail ou senha incorretos."
               : error.message;
 
@@ -159,8 +602,7 @@
           return;
         }
 
-        // ✅ Sucesso
-        window.location.href = "https://italiano-facil.github.io/ITALIANO-FACIL-KANBAN/";
+        window.location.href = DASHBOARD_URL;
       } catch (err) {
         showError("Erro inesperado ao tentar logar.");
         console.error(err);
@@ -171,8 +613,7 @@
 
     // ✅ Recuperação de senha
     forgotBtn.addEventListener("click", async () => {
-      errorMessage.classList.add("hidden");
-      successMessage.classList.add("hidden");
+      hideMsgs();
 
       const email = document.getElementById("email").value.trim();
       if (!email) {
@@ -181,11 +622,12 @@
       }
 
       try {
-        // IMPORTANTE: configure a URL de redirect no Supabase Auth (Redirect URLs)
-        // e crie uma página /reset.html (ou use a própria do Supabase).
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin + "/reset.html",
-        });
+        // IMPORTANTE:
+        // - Configure Redirect URLs no Supabase (Auth)
+        // - Crie um reset.html (ou use o fluxo padrão)
+        const redirectTo = `${window.location.origin}/reset.html`;
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
         if (error) {
           showError(error.message);
@@ -200,5 +642,4 @@
     });
   </script>
 </body>
-
 </html>
