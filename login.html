@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - CRM Italiano Fácil</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+    body {
+      font-family: "Inter", sans-serif;
+      background-color: #f3f4f6;
+      background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-4">
+  <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border-t-4 border-green-600">
+
+    <div class="flex justify-center mb-8">
+      <img
+        src="https://italianofacil.com/wp-content/uploads/2023/01/logo-1-1-9-Italiano-Facil-1024x442.png"
+        alt="CRM Italiano Fácil Logo"
+        class="h-16 object-contain"
+      />
+    </div>
+
+    <h2 class="text-2xl font-bold text-center text-gray-800 mb-2">Bem-vindo(a) ao CRM</h2>
+    <p class="text-center text-gray-500 mb-8 text-sm">Acesse sua conta para gerenciar seus leads.</p>
+
+    <form id="login-form" class="space-y-6">
+      <div>
+        <label for="email" class="block text-sm font-medium text-gray-700">E-mail</label>
+        <div class="mt-1">
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="seu@email.com"
+            class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+          />
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between">
+          <label for="password" class="block text-sm font-medium text-gray-700">Senha</label>
+          <button
+            type="button"
+            id="forgot-password"
+            class="text-xs font-medium text-red-600 hover:text-red-500"
+          >
+            Esqueceu a senha?
+          </button>
+        </div>
+        <div class="mt-1">
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            autocomplete="current-password"
+            placeholder="••••••••"
+            class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+          />
+        </div>
+      </div>
+
+      <div>
+        <button
+          id="submit-btn"
+          type="submit"
+          class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+        >
+          Entrar no CRM
+        </button>
+      </div>
+    </form>
+
+    <div id="error-message" class="hidden mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 text-center"></div>
+    <div id="success-message" class="hidden mt-4 p-3 bg-green-50 text-green-800 text-sm rounded-lg border border-green-200 text-center"></div>
+
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    // dados do Supabase
+    const SUPABASE_URL = "https://jzeodgbaquiwgnbnjwkw.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6ZW9kZ2JhcXVpd2duYm5qd2t3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxOTA5ODQsImV4cCI6MjA4Nzc2Njk4NH0.WtB6dRdhbKXHnH2KOZ3_qUenXU_5mchWfrA2936AzwA";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const form = document.getElementById("login-form");
+    const errorMessage = document.getElementById("error-message");
+    const successMessage = document.getElementById("success-message");
+    const submitBtn = document.getElementById("submit-btn");
+    const forgotBtn = document.getElementById("forgot-password");
+
+    function setLoading(isLoading) {
+      submitBtn.disabled = isLoading;
+      submitBtn.classList.toggle("opacity-70", isLoading);
+      submitBtn.classList.toggle("cursor-not-allowed", isLoading);
+      submitBtn.textContent = isLoading ? "Entrando..." : "Entrar no CRM";
+    }
+
+    function showError(msg) {
+      successMessage.classList.add("hidden");
+      errorMessage.classList.remove("hidden");
+      errorMessage.textContent = msg;
+    }
+
+    function showSuccess(msg) {
+      errorMessage.classList.add("hidden");
+      successMessage.classList.remove("hidden");
+      successMessage.textContent = msg;
+    }
+
+    // ✅ Se já estiver logado, manda direto pro dashboard
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData?.session) {
+      window.location.href = "file:///C:/Kanban/index.html";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorMessage.classList.add("hidden");
+      successMessage.classList.add("hidden");
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      if (!email || !password) {
+        showError("Preencha e-mail e senha.");
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          // Mensagens mais amigáveis
+          const msg =
+            error.message?.toLowerCase().includes("invalid login credentials")
+              ? "E-mail ou senha incorretos."
+              : error.message;
+
+          showError(msg);
+          return;
+        }
+
+        // ✅ Sucesso
+        window.location.href = "file:///C:/Kanban/index.html";
+      } catch (err) {
+        showError("Erro inesperado ao tentar logar.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    // ✅ Recuperação de senha
+    forgotBtn.addEventListener("click", async () => {
+      errorMessage.classList.add("hidden");
+      successMessage.classList.add("hidden");
+
+      const email = document.getElementById("email").value.trim();
+      if (!email) {
+        showError("Digite seu e-mail para receber o link de redefinição.");
+        return;
+      }
+
+      try {
+        // IMPORTANTE: configure a URL de redirect no Supabase Auth (Redirect URLs)
+        // e crie uma página /reset.html (ou use a própria do Supabase).
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + "/reset.html",
+        });
+
+        if (error) {
+          showError(error.message);
+          return;
+        }
+
+        showSuccess("Pronto! Se esse e-mail existir, você receberá um link para redefinir a senha.");
+      } catch (err) {
+        showError("Erro ao solicitar redefinição de senha.");
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
