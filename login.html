@@ -124,7 +124,7 @@
     // ✅ Se já estiver logado, manda direto pro dashboard
     const { data: sessionData } = await supabase.auth.getSession();
     if (sessionData?.session) {
-      window.location.href = "file:///C:/Kanban/index.html";
+      window.location.href = "https://italiano-facil.github.io/ITALIANO-FACIL-KANBAN/";
     }
 
     form.addEventListener("submit", async (e) => {
@@ -160,7 +160,7 @@
         }
 
         // ✅ Sucesso
-        window.location.href = "file:///C:/Kanban/index.html";
+        window.location.href = "https://italiano-facil.github.io/ITALIANO-FACIL-KANBAN/";
       } catch (err) {
         showError("Erro inesperado ao tentar logar.");
         console.error(err);
@@ -200,4 +200,5 @@
     });
   </script>
 </body>
+
 </html>
