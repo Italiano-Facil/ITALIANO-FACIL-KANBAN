@@ -595,6 +595,12 @@
       overflow-y:auto;
       align-content:start;
     }
+    .page{
+  flex: 1;
+  padding: 18px;
+  overflow-y: auto;
+  align-content: start;
+}
     .chart-card{
       background: rgba(18,24,33,0.62);
       border:1px solid rgba(255,255,255,0.08);
@@ -831,9 +837,7 @@
           <span>Kanban • Dashboard</span>
         </div>
       </div>
-      <button id="navPreVendas" type="button" onclick="setView('prevendas')">
-  <i class="ph ph-paper-plane-tilt"></i> Pré-vendas
-</button>
+
 
       <div class="nav">
         <button id="navKanban" class="active" type="button" onclick="setView('kanban')">
@@ -845,6 +849,9 @@
         <button id="navDash" type="button" onclick="setView('dashboard')">
           <i class="ph ph-chart-bar"></i> Dashboard
         </button>
+              <button id="navPreVendas" type="button" onclick="setView('prevendas')">
+  <i class="ph ph-paper-plane-tilt"></i> Pré-vendas
+</button>
 
         <!-- Aba NOVA 1 -->
         <button id="navReports" type="button" onclick="setView('reports')">
@@ -927,51 +934,55 @@
         </div>
       </header>
 
-      <div class="content">
-        <main id="board" class="board">
-          <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
-            <i class="ph ph-hourglass-medium"></i> Carregando dados...
-
-        <i class="ph ph-arrows-clockwise"></i> Atualizar
-      </button>
+     <div class="content">
+  <!-- KANBAN -->
+  <main id="board" class="board">
+    <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
+      <i class="ph ph-hourglass-medium"></i> Carregando dados...
     </div>
-          <main id="prevendas" class="reports hidden">
-  <div class="chart-card">
-    <div class="chart-title">
-      <div class="left"><i class="ph ph-paper-plane-tilt"></i> Pré-vendas → Comercial</div>
-      <button class="btn primary" type="button" onclick="renderPreVendas()">
+  </main>
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
-      <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar lead (nome/telefone)..." />
-      <select id="pvFilterStage" class="input" style="width:auto;">
-        <option value="">Todas etapas</option>
-        <option value="Inicial">Inicial</option>
-        <option value="A02">A02</option>
-        <option value="A03">A03</option>
-        <option value="A04">A04</option>
-        <option value="Link-Enviado">Link-Enviado</option>
-        <option value="Parabéns">Parabéns</option>
-      </select>
-      <span id="pvCount" class="pill">0</span>
+  <!-- PRÉ-VENDAS -->
+  <main id="prevendas" class="page hidden">
+    <div class="chart-card" style="width:100%;">
+      <div class="chart-title">
+        <div class="left"><i class="ph ph-paper-plane-tilt"></i> Pré-vendas → Comercial</div>
+        <button class="btn primary" type="button" onclick="renderPreVendas()">
+          <i class="ph ph-arrows-clockwise"></i> Atualizar
+        </button>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+        <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar lead (nome/telefone)..." />
+        <select id="pvFilterStage" class="input" style="width:auto;">
+          <option value="">Todas etapas</option>
+          <option value="Inicial">Inicial</option>
+          <option value="A02">A02</option>
+          <option value="A03">A03</option>
+          <option value="A04">A04</option>
+          <option value="Link-Enviado">Link-Enviado</option>
+          <option value="Parabéns">Parabéns</option>
+        </select>
+        <span id="pvCount" class="pill">0</span>
+      </div>
+
+      <div id="prevendasWrap"></div>
     </div>
+  </main>
 
-    <div id="prevendasWrap"></div>
-  </div>
-</main>
-          </div>
-        </main>
-        <main id="unassigned" class="reports hidden">
-  <div class="chart-card">
-    <div class="chart-title">
-      <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
-<button class="btn primary" type="button" onclick="reload()">
-        <i class="ph ph-arrows-clockwise"></i> Atualizar lista
-      </button>
+  <!-- NÃO ATRIBUÍDO -->
+  <main id="unassigned" class="page hidden">
+    <div class="chart-card" style="width:100%;">
+      <div class="chart-title">
+        <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
+        <button class="btn primary" type="button" onclick="reload()">
+          <i class="ph ph-arrows-clockwise"></i> Atualizar lista
+        </button>
+      </div>
+      <div id="unassignedWrap"></div>
     </div>
+  </main>
 
-    <div id="unassignedWrap"></div>
-  </div>
-</main>
 
         <main id="dashboard" class="dashboard hidden">
           <div class="chart-card">
@@ -3088,6 +3099,7 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
 
