@@ -1189,25 +1189,30 @@ const KANBAN = {
     });
 
     /*********************** AUTH **************************************/
-    async function protectWithAuth(){
-      try{
-        const { data: { session } } = await sb.auth.getSession();
-        if (!session) {
-          window.location.href = "./login.html";
-          return;
-        }
-        const userInfo = document.getElementById("userInfo");
-        if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
+async function protectWithAuth(){
+  try{
+    const { data: { session } } = await sb.auth.getSession();
 
-        const btnLogout = document.getElementById("btnLogout");
-        if (btnLogout) btnLogout.addEventListener("click", async () => {
-          await sb.auth.signOut();
-          window.location.href = "./login.html";
-        });
-      }catch(err){
-        showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
-      }
+    if (!session) {
+      window.location.href = "./login.html";
+      return;
     }
+
+    const userInfo = document.getElementById("userInfo");
+    if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
+
+    const btnLogout = document.getElementById("btnLogout");
+    if (btnLogout) {
+      btnLogout.addEventListener("click", async () => {
+        await sb.auth.signOut();
+        window.location.href = "./login.html";
+      });
+    }
+  } catch(err){
+    showToast("Falha ao validar sessão", String(err?.message || err), "error", 4500);
+    console.error("protectWithAuth error:", err);
+  }
+}
 
     /*********************** VIEW **************************************/
     function setView(which){
@@ -2476,6 +2481,7 @@ function askPasswordModal_(){
 </body>
 
 </html>
+
 
 
 
