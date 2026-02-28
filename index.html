@@ -1149,11 +1149,12 @@
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     /*********************** KANBAN CONFIG *****************************/
-    const KANBAN = {
-      TABLE: "Leads-Geral1", 
-      STAGES: ['Inicial', 'A02', 'A03', 'A04', 'Link-Enviado', 'Parabéns'],
-      SLA: { warnMin: 30, dangerMin: 60 }
-    };
+const KANBAN = {
+  TABLE: "Leads-Geral1",
+  ID_COL: "id",
+  STAGES: ['Inicial', 'A02', 'A03', 'A04', 'Link-Enviado', 'Parabéns'],
+  SLA: { warnMin: 30, dangerMin: 60 }
+};
 
     /*********************** CHART GLOBALS *****************************/
     Chart.defaults.color = '#9aa7b4';
@@ -1990,7 +1991,7 @@ const idCol = (KANBAN && KANBAN.ID_COL) ? KANBAN.ID_COL : "id";
 const { error: delErr } = await sb
   .from(KANBAN.TABLE)
   .delete()
-  .eq(idCol, leadId);
+  .eq(KANBAN.ID_COL, leadId); // agora ID_COL existe
 
   if(delErr) throw delErr;
 
@@ -2475,5 +2476,6 @@ function askPasswordModal_(){
 </body>
 
 </html>
+
 
 
