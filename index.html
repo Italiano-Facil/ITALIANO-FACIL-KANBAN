@@ -1435,22 +1435,24 @@
           const orig = safe_(row['origem-id'], '—');
           if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
           if(orig !== '—' && orig !== '') origensSet.add(orig);
+  
+const rowId = row.id;     // id real do banco
+if (rowId == null) continue; // pula se vier sem id
 
-          cards.push({
-            id: row['id'],
-            name: safe_(row.nome, '(Sem nome)'),
-            phone: safe_(row.telefone, ''),
-            origem: orig,
-            responsavel: resp,
-            manychat: safe_(row['Manychat_id'], ''),
-            motivo: safe_(row['Motivo'], ''),
-            fluxo: stage,
-            horaLabel: formatHora_(horaEntrada),
-            stageTs: stageTs || 0,
-            sortTs: sortTs || 0,
-            ageSec
-          });
-        }
+cards.push({
+  id: rowId,
+  name: safe_(row.nome, '(Sem nome)'),
+  phone: safe_(row.telefone, ''),
+  origem: orig,
+  responsavel: resp,
+  manychat: safe_(row['Manychat_id'], ''),
+  motivo: safe_(row['Motivo'], ''),
+  fluxo: stage,
+  horaLabel: formatHora_(horaEntrada),
+  stageTs: stageTs || 0,
+  sortTs: sortTs || 0,
+  ageSec
+});
 
         const stageAverages = {};
         for(const s of KANBAN.STAGES){
@@ -1968,26 +1970,30 @@
 }
 
 async function deleteLeadWithPassword_(leadId, password){
-  // Pega usuário atual (requisição real ao auth server)
+async function deleteLeadWithPassword_(leadId, password){
+  // debug que te diz a verdade na hora
+  console.log("DEBUG delete:", { table: KANBAN.TABLE, idCol: KANBAN.ID_COL, leadId });
+
+  if(leadId == null) throw new Error("Lead sem ID (leadId undefined/null).");
+
   const { data: userRes, error: userErr } = await sb.auth.getUser();
   if(userErr) throw userErr;
+
   const email = userRes?.user?.email;
   if(!email) throw new Error("Sessão sem email. Faça login novamente.");
 
-  // Reautentica pedindo a senha (tentando login com email/senha)
-  // (Password-based auth é o fluxo padrão aqui. :contentReference[oaicite:1]{index=1})
   const { error: authErr } = await sb.auth.signInWithPassword({ email, password });
   if(authErr) throw new Error("Senha incorreta. Exclusão bloqueada.");
 
-  // Delete no banco (forma oficial: delete() + filtros. :contentReference[oaicite:2]{index=2})
-  const { error: delErr } = await sb
-    .from(KANBAN.TABLE)
-    .delete()
-    .eq(KANBAN.ID_COL, leadId);
+const idCol = (KANBAN && KANBAN.ID_COL) ? KANBAN.ID_COL : "id";
+
+const { error: delErr } = await sb
+  .from(KANBAN.TABLE)
+  .delete()
+  .eq(idCol, leadId);
 
   if(delErr) throw delErr;
 
-  // Atualiza estado local (otimista)
   STATE.cards = (STATE.cards || []).filter(c => String(c.id) !== String(leadId));
 
   closeModal();
@@ -2469,4 +2475,5 @@ function askPasswordModal_(){
 </body>
 
 </html>
+
 
