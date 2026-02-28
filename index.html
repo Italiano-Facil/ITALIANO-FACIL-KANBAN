@@ -1080,6 +1080,9 @@
           </a>
         </div>
         <div class="modal-right">
+          <button class="btn danger" type="button" onclick="requestDeleteLead()">
+  <i class="ph ph-trash"></i> Excluir
+</button>
           <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
           <button class="btn primary" type="button" onclick="saveModal()">
             <i class="ph ph-floppy-disk"></i> Salvar
@@ -1941,7 +1944,127 @@
       MODAL.open = false;
       MODAL.card = null;
     }
+  async function requestDeleteLead(){
+  if(!MODAL.card) return;
 
+  const card = MODAL.card;
+
+  // Confirmação básica
+  const ok = confirm(`Excluir o lead "${card.name}"?\nEssa ação não pode ser desfeita.`);
+  if(!ok) return;
+
+  // Abre prompt de senha (custom, não o prompt() feioso)
+  const password = await askPasswordModal_();
+  if(!password) {
+    showToast("Exclusão cancelada", "Senha não informada", "info", 2400);
+    return;
+  }
+
+  try{
+    await deleteLeadWithPassword_(card.id, password);
+  }catch(err){
+    showToast("Não foi possível excluir", String(err.message || err), "error", 5200);
+  }
+}
+
+async function deleteLeadWithPassword_(leadId, password){
+  // Pega usuário atual (requisição real ao auth server)
+  const { data: userRes, error: userErr } = await sb.auth.getUser();
+  if(userErr) throw userErr;
+  const email = userRes?.user?.email;
+  if(!email) throw new Error("Sessão sem email. Faça login novamente.");
+
+  // Reautentica pedindo a senha (tentando login com email/senha)
+  // (Password-based auth é o fluxo padrão aqui. :contentReference[oaicite:1]{index=1})
+  const { error: authErr } = await sb.auth.signInWithPassword({ email, password });
+  if(authErr) throw new Error("Senha incorreta. Exclusão bloqueada.");
+
+  // Delete no banco (forma oficial: delete() + filtros. :contentReference[oaicite:2]{index=2})
+  const { error: delErr } = await sb
+    .from(KANBAN.TABLE)
+    .delete()
+    .eq(KANBAN.ID_COL, leadId);
+
+  if(delErr) throw delErr;
+
+  // Atualiza estado local (otimista)
+  STATE.cards = (STATE.cards || []).filter(c => String(c.id) !== String(leadId));
+
+  closeModal();
+  if(VIEW === "kanban") renderBoard();
+  if(VIEW === "dashboard") renderDashboard();
+  if(VIEW === "reports") renderReports();
+  updateMetrics();
+
+  showToast("Lead excluído", "Registro removido com sucesso", "success", 2400);
+}
+
+/** Modal simples para pedir senha (cria e remove DOM) */
+function askPasswordModal_(){
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.style.zIndex = "5000";
+
+    overlay.innerHTML = `
+      <div class="modal" style="width:min(420px, 100%);">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Confirmar exclusão</div>
+            <div class="modal-sub">Digite a senha da sua conta para excluir</div>
+          </div>
+          <button class="iconbtn" type="button" id="pwClose"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Senha</label>
+            <input id="pwInput" type="password" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <div style="color:var(--muted); font-weight:800; font-size:12px; line-height:1.4;">
+            Dica: isso impede exclusões acidentais.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div></div>
+          <div class="modal-right">
+            <button class="btn ghost" type="button" id="pwCancel">Cancelar</button>
+            <button class="btn danger" type="button" id="pwOk">
+              <i class="ph ph-trash"></i> Confirmar exclusão
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    function cleanup(val){
+      overlay.remove();
+      resolve(val);
+    }
+
+    overlay.addEventListener("click", (e) => {
+      if(e.target === overlay) cleanup("");
+    });
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector("#pwInput");
+    const btnOk = overlay.querySelector("#pwOk");
+    const btnCancel = overlay.querySelector("#pwCancel");
+    const btnClose = overlay.querySelector("#pwClose");
+
+    btnCancel.onclick = () => cleanup("");
+    btnClose.onclick = () => cleanup("");
+    btnOk.onclick = () => cleanup((input.value || "").trim());
+
+    // Enter confirma
+    input.addEventListener("keydown", (e) => {
+      if(e.key === "Enter") btnOk.click();
+      if(e.key === "Escape") btnCancel.click();
+    });
+
+    setTimeout(() => input.focus(), 50);
+  });
+}
     async function saveModal(){
       if(!MODAL.card) return;
 
@@ -2346,3 +2469,4 @@
 </body>
 
 </html>
+
