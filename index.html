@@ -1329,7 +1329,7 @@ async function protectWithAuth(){
 
     // fallback (temporário) pra você não travar
     // troque pelo seu email
-    if (!AUTH.isAdmin && session.user.email === "SEU_EMAIL_AQUI") {
+    if (!AUTH.isAdmin && session.user.email === "vinicius@italianofacil.com") {
       AUTH.isAdmin = true;
     }
 
@@ -1824,8 +1824,6 @@ async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo, 
     "Hora-entrada": now.toLocaleTimeString("pt-BR"),
     "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
     "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
-
-    // autoria
     created_by_auth: AUTH.session?.user?.id || null,
     created_by_atendente_id: AUTH.atendenteId || null,
     created_by_role: createdRole || null,
@@ -1838,16 +1836,22 @@ async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo, 
     .single();
 
   if(error) throw error;
-  return data; // { id }
+  return data;
 }
-  const { data, error } = await sb
-    .from(KANBAN.TABLE)
-    .insert(payload)
-    .select('id')
-    .single();
+    async function updateLeadCore(id, { nome, telefone, fluxo }){
+  const payload = {};
+  if(nome !== undefined) payload["nome"] = nome;
+  if(telefone !== undefined) payload["telefone"] = telefone;
+  if(fluxo !== undefined) payload["fluxo-id"] = fluxo;
 
+  const now = new Date();
+  if(fluxo !== undefined){
+    payload["Data da mudança do fluxo"] = now.toLocaleDateString("pt-BR");
+    payload["Hora da mudança do fluxo"] = now.toLocaleTimeString("pt-BR");
+  }
+
+  const { error } = await sb.from(KANBAN.TABLE).update(payload).eq("id", id);
   if(error) throw error;
-  return data; // { id }
 }
 
     async function getKanbanData(){
@@ -2750,8 +2754,6 @@ async function saveModal(){
   const fOrig = document.getElementById('fOrigem');
   const fMotivo = document.getElementById('fMotivo');
 
-  if(!fNome || !fTelefone || !fFluxo || !fResp || !fOrig || !fMotivo) return;
-
   const nome = (fNome.value || "").trim();
   const telefone = (fTelefone.value || "").trim();
   const fluxo = (fFluxo.value || "Inicial").trim();
@@ -2760,16 +2762,6 @@ async function saveModal(){
     responsavel: (fResp.value || '').trim() || '—',
     origem: (fOrig.value || '').trim() || '—',
     motivo: (fMotivo.value || '').trim()
-
-    const created = await createLead({
-  nome,
-  telefone,
-  fluxo,
-  responsavel: AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas",
-  origem: newFields.origem,
-  motivo: newFields.motivo,
-  createdRole: "prevendas"
-});
   };
 
   // ===== MODO CRIAR =====
@@ -2783,14 +2775,16 @@ async function saveModal(){
     showToast("Criando…", nome, "info", 1800);
 
     try{
-const created = await createLead({
-  nome, telefone, fluxo,
-  responsavel: AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas",
-  origem, motivo,
-  createdRole: "prevendas"
-});
+      const created = await createLead({
+        nome,
+        telefone,
+        fluxo,
+        responsavel: newFields.responsavel,
+        origem: newFields.origem,
+        motivo: newFields.motivo,
+        createdRole: "prevendas"
+      });
 
-      // coloca no estado e renderiza sem precisar reload total
       STATE.cards.unshift({
         id: created.id,
         name: nome,
@@ -2808,7 +2802,6 @@ const created = await createLead({
 
       updateMetrics();
       populateFilters();
-
       if(VIEW === "kanban") renderBoard();
       if(VIEW === "dashboard") renderDashboard();
       if(VIEW === "reports") renderReports();
@@ -2817,16 +2810,19 @@ const created = await createLead({
     }catch(err){
       showToast("Falha ao criar", String(err.message || err), "error", 5200);
     }
-
     return;
   }
 
-  // ===== MODO EDITAR (SEU FLUXO ATUAL) =====
+  // ===== MODO EDITAR =====
   if(!MODAL.card) return;
 
   const card = MODAL.card;
-
   const old = { responsavel: card.responsavel, origem: card.origem, motivo: card.motivo };
+
+  // atualiza local (otimista)
+  card.name = nome;
+  card.phone = telefone;
+  card.fluxo = fluxo;
   card.responsavel = newFields.responsavel;
   card.origem = newFields.origem;
   card.motivo = newFields.motivo;
@@ -2839,18 +2835,19 @@ const created = await createLead({
   showToast("Salvando…", card.name, "info", 1800);
 
   try{
+    // atualiza campos + fluxo (se quiser)
     await updateCardFields(card.id, newFields);
+    await updateCardStage(card.id, fluxo);
+    await updateLeadCore(card.id, { nome, telefone, fluxo });
+await updateCardFields(card.id, newFields);
+
     showToast("Atualizado", "Dados do lead salvos", "success", 2200);
     populateFilters();
   }catch(err){
+    // rollback
     card.responsavel = old.responsavel;
     card.origem = old.origem;
     card.motivo = old.motivo;
-
-    if(VIEW === "kanban") renderBoard();
-    if(VIEW === "dashboard") renderDashboard();
-    if(VIEW === "reports") renderReports();
-
     showToast("Falha ao salvar", String(err.message || err), "error", 5200);
   }
 }
@@ -3212,6 +3209,7 @@ const created = await createLead({
   </script>
 </body>
 </html>
+
 
 
 
