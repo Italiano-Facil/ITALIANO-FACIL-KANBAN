@@ -831,6 +831,9 @@
           <span>Kanban • Dashboard</span>
         </div>
       </div>
+      <button id="navPreVendas" type="button" onclick="setView('prevendas')">
+  <i class="ph ph-paper-plane-tilt"></i> Pré-vendas
+</button>
 
       <div class="nav">
         <button id="navKanban" class="active" type="button" onclick="setView('kanban')">
@@ -928,6 +931,32 @@
         <main id="board" class="board">
           <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
             <i class="ph ph-hourglass-medium"></i> Carregando dados...
+            <main id="prevendas" class="reports hidden">
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-paper-plane-tilt"></i> Pré-vendas → Comercial</div>
+      <button class="btn primary" type="button" onclick="renderPreVendas()">
+        <i class="ph ph-arrows-clockwise"></i> Atualizar
+      </button>
+    </div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+      <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar lead (nome/telefone)..." />
+      <select id="pvFilterStage" class="input" style="width:auto;">
+        <option value="">Todas etapas</option>
+        <option value="Inicial">Inicial</option>
+        <option value="A02">A02</option>
+        <option value="A03">A03</option>
+        <option value="A04">A04</option>
+        <option value="Link-Enviado">Link-Enviado</option>
+        <option value="Parabéns">Parabéns</option>
+      </select>
+      <span id="pvCount" class="pill">0</span>
+    </div>
+
+    <div id="prevendasWrap"></div>
+  </div>
+</main>
           </div>
         </main>
         <main id="unassigned" class="reports hidden">
@@ -1228,6 +1257,7 @@
       await reload();
       setAutoRefresh(true);
       syncSettingsUI();
+      setupPreVendasListeners();
     });
 
     /*********************** AUTH **************************************/
@@ -1290,17 +1320,141 @@ if (navUn) {
   navUn.classList.toggle("hidden", !AUTH.isAdmin);
 }
 }
+    async function renderPreVendas(){
+  const wrap = document.getElementById("prevendasWrap");
+  const countEl = document.getElementById("pvCount");
+  if(!wrap) return;
+
+  // leads disponíveis: aqui você define a regra.
+  // Sugestão: pré-vendas trabalha com Inicial/A02 (ajuste se quiser)
+  const base = (STATE.cards || []).filter(c => {
+    // não mostrar Parabéns por padrão
+    if(String(c.fluxo).toLowerCase() === "parabéns") return false;
+    return true;
+  });
+
+  const cards = base
+    .filter(c => !PV.stage || String(c.fluxo) === String(PV.stage))
+    .filter(c => {
+      if(!PV.search) return true;
+      const hay = `${c.name||""} ${c.phone||""} ${c.origem||""}`.toLowerCase();
+      return hay.includes(PV.search);
+    })
+    .sort((a,b)=> b.sortTs - a.sortTs);
+
+  if(countEl) countEl.textContent = String(cards.length);
+
+  // carrega comercial
+  let comercial = [];
+  try{
+    comercial = await loadAtendentesComercial();
+  }catch(e){
+    console.warn(e);
+  }
+
+  if(!cards.length){
+    wrap.innerHTML = `<div style="color:var(--muted); font-weight:900;">Nenhum lead para pré-vendas agora 🎯</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Lead</th>
+          <th>Telefone</th>
+          <th>Etapa</th>
+          <th>Enviar para</th>
+          <th>Anotações</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cards.map(c => `
+          <tr>
+            <td>
+              <b>${escapeHtml(c.name)}</b>
+              <div style="color:var(--muted); font-size:12px;">ID: ${escapeHtml(String(c.id))}</div>
+            </td>
+            <td>${escapeHtml(c.phone || "—")}</td>
+            <td><span class="pill-mini">${escapeHtml(c.fluxo || "—")}</span></td>
+
+            <td>
+              <select class="input" style="width:220px" id="pv-to-${c.id}">
+                <option value="">Selecionar atendente…</option>
+                ${comercial.map(a => `
+                  <option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>
+                `).join("")}
+              </select>
+            </td>
+
+            <td>
+              <input class="input" style="width:320px"
+                     id="pv-note-${c.id}"
+                     placeholder="O que o lead quer? Contexto, urgência, perfil…" />
+            </td>
+
+            <td>
+              <button class="btn primary" type="button" onclick="sendToComercial('${c.id}')">
+                <i class="ph ph-paper-plane-tilt"></i> Enviar
+              </button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+    async function sendToComercial(leadId){
+  const sel = document.getElementById(`pv-to-${leadId}`);
+  const noteEl = document.getElementById(`pv-note-${leadId}`);
+
+  const paraId = sel?.value;
+  const nota = (noteEl?.value || "").trim();
+
+  if(!paraId){
+    showToast("Falta atendente", "Selecione quem vai receber no comercial", "warn");
+    return;
+  }
+  if(!nota){
+    showToast("Falta anotação", "Escreva o que o lead quer (contexto)", "warn");
+    return;
+  }
+
+  showToast("Enviando…", "Criando handoff", "info", 1600);
+
+  try{
+    const payload = {
+      lead_id: leadId,
+      de_atendente_id: AUTH.atendenteId,
+      para_atendente_id: paraId,
+      nota: nota,
+      status: "pendente"
+    };
+
+    const { error } = await sb.from("lead_handoffs").insert(payload);
+    if(error) throw error;
+
+    // opcional: limpar campo
+    if(noteEl) noteEl.value = "";
+
+    showToast("Enviado ✅", "Pré-vendas → Comercial (pendente)", "success", 2400);
+
+  }catch(err){
+    showToast("Falha ao enviar", String(err.message || err), "error", 5200);
+  }
+}
     /*********************** VIEW **************************************/
 function setView(which){
   VIEW = which;
-
+  const prevendas = document.getElementById('prevendas');
   const board = document.getElementById('board');
   const dash = document.getElementById('dashboard');
   const reports = document.getElementById('reports');
   const settings = document.getElementById('settings');
   const unassigned = document.getElementById('unassigned');
 
-  ['navKanban','navDash','navReports','navSettings','navUnassigned']
+  ['navKanban','navDash','navReports','navSettings','navUnassigned','navPreVendas']
     .forEach(id => document.getElementById(id)?.classList.remove('active'));
 
   board.classList.add('hidden');
@@ -1308,12 +1462,17 @@ function setView(which){
   reports.classList.add('hidden');
   settings.classList.add('hidden');
   unassigned?.classList.add('hidden');
+  prevendas?.classList.add('hidden');
 
   if(which === 'dashboard'){
     dash.classList.remove('hidden');
     document.getElementById('navDash')?.classList.add('active');
     renderDashboard();
-
+}else if(which === 'prevendas'){
+  prevendas?.classList.remove('hidden');
+  document.getElementById('navPreVendas')?.classList.add('active');
+  renderPreVendas();
+}
   }else if(which === 'reports'){
     reports.classList.remove('hidden');
     document.getElementById('navReports')?.classList.add('active');
@@ -1479,6 +1638,27 @@ async function reload(){
       }
       showToast("Erro de conexão", msg, "error", 5000);
     }
+
+    async function loadAtendentesComercial(){
+  const { data, error } = await sb
+    .from("atendentes")
+    .select("id, nome, ativo, departamento")
+    .eq("ativo", true)
+    .order("nome", { ascending: true });
+
+  if(error) throw error;
+
+  const all = data || [];
+
+  // se existir departamento, tenta filtrar Comercial
+  const hasDept = all.some(a => a.departamento !== undefined && a.departamento !== null);
+  const filtered = hasDept
+    ? all.filter(a => String(a.departamento || "").toLowerCase().includes("comercial"))
+    : all;
+
+  // não mandar para si mesmo
+  return filtered.filter(a => String(a.id) !== String(AUTH.atendenteId));
+}
 
     function updateMetrics(){
       const upd = document.getElementById('updatedAt');
@@ -1973,7 +2153,19 @@ function renderUnassigned(){
     showToast("Falha ao atribuir", String(err.message || err), "error", 5200);
   }
 }
+let PV = { search: "", stage: "" };
 
+function setupPreVendasListeners(){
+  document.getElementById("pvSearch")?.addEventListener("input", (e)=>{
+    PV.search = (e.target.value || "").toLowerCase().trim();
+    renderPreVendas();
+  });
+
+  document.getElementById("pvFilterStage")?.addEventListener("change", (e)=>{
+    PV.stage = e.target.value || "";
+    renderPreVendas();
+  });
+}
     /*********************** UI RENDER: DASH ****************************/
     function renderDashboard(){
       if(!document.getElementById('funilChart')) return;
@@ -2875,6 +3067,7 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
 
