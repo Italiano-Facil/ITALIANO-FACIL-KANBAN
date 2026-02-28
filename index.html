@@ -908,7 +908,9 @@
           <button class="btn" type="button" onclick="toggleCompact()">
             <i class="ph ph-text-aa"></i> Compacto
           </button>
-
+          <button class="btn primary" type="button" onclick="openCreateLead()">
+  <i class="ph ph-plus"></i> Novo Lead
+</button>
           <button class="btn primary" type="button" onclick="reload()">
             <i class="ph ph-arrows-clockwise"></i> Atualizar
           </button>
@@ -1060,6 +1062,27 @@
       
       <div class="modal-body">
         <div class="field">
+  <label>Nome</label>
+  <input id="fNome" type="text" />
+</div>
+
+<div class="field">
+  <label>Telefone</label>
+  <input id="fTelefone" type="text" placeholder="(51) 99999-9999" />
+</div>
+
+<div class="field">
+  <label>Etapa (Fluxo)</label>
+  <select id="fFluxo" class="input" style="border-radius:14px;">
+    <option value="Inicial">Inicial</option>
+    <option value="A02">A02</option>
+    <option value="A03">A03</option>
+    <option value="A04">A04</option>
+    <option value="Link-Enviado">Link-Enviado</option>
+    <option value="Parabéns">Parabéns</option>
+  </select>
+</div>
+        <div class="field">
           <label>Responsável</label>
           <input id="fResponsavel" type="text" />
         </div>
@@ -1167,7 +1190,7 @@
     let FILTER_ORIG = "";
     let TIMER_HANDLE = null;
     let AUTO_REFRESH_HANDLE = null;
-    let MODAL = { open: false, card: null };
+    let MODAL = { open: false, card: null, mode: "edit" }; // "edit" | "create"
     let charts = { funil: null, consultor: null, sla: null, links: null, conversao: null, funilVendedor: null };
     let VIEW = "kanban";
 
@@ -1405,6 +1428,33 @@
             fetchMore = false;
           }
         }
+        async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo }){
+  if(!KANBAN.STAGES.includes(fluxo)) fluxo = "Inicial";
+
+  const now = new Date();
+
+  const payload = {
+    nome: nome,
+    telefone: telefone,
+    'fluxo-id': fluxo,
+    'responsavel-id': responsavel || '—',
+    'origem-id': origem || '—',
+    'Motivo': motivo || '',
+    'Data': now.toLocaleDateString('pt-BR'),
+    'Hora-entrada': now.toLocaleTimeString('pt-BR'),
+    'Data da mudança do fluxo': now.toLocaleDateString('pt-BR'),
+    'Hora da mudança do fluxo': now.toLocaleTimeString('pt-BR'),
+  };
+
+  const { data, error } = await sb
+    .from(KANBAN.TABLE)
+    .insert(payload)
+    .select('id')
+    .single();
+
+  if(error) throw error;
+  return data; // { id }
+}
 
         const nowMs = Date.now();
         const stats = {};
@@ -1834,6 +1884,43 @@
       const tbody = rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(String(c))}</td>`).join("")}</tr>`).join("");
       return `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
     }
+    function openCreateLead(){
+  MODAL.open = true;
+  MODAL.mode = "create";
+  MODAL.card = null;
+
+  const overlay = document.getElementById('modalOverlay');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalSub   = document.getElementById('modalSub');
+
+  const fNome = document.getElementById('fNome');
+  const fTelefone = document.getElementById('fTelefone');
+  const fFluxo = document.getElementById('fFluxo');
+  const fResp = document.getElementById('fResponsavel');
+  const fOrig = document.getElementById('fOrigem');
+  const fMotivo = document.getElementById('fMotivo');
+
+  if(!overlay || !modalTitle || !modalSub || !fNome || !fTelefone || !fFluxo || !fResp || !fOrig || !fMotivo){
+    showToast("Modal incompleto", "Faltam IDs no HTML do modal", "error", 5200);
+    return;
+  }
+
+  modalTitle.textContent = "Novo Lead";
+  modalSub.textContent = "Preencha os dados e clique em Salvar";
+
+  fNome.value = "";
+  fTelefone.value = "";
+  fFluxo.value = "Inicial";
+  fResp.value = "";
+  fOrig.value = "";
+  fMotivo.value = "";
+
+  // WhatsApp não faz sentido no “novo”
+  const waBtn = document.getElementById('waBtn');
+  if(waBtn) waBtn.classList.add('hidden');
+
+  overlay.classList.remove('hidden');
+}
 
     /*********************** DRAG & DROP *******************************/
     function onDragOver(e){
@@ -1902,6 +1989,7 @@
 
     /*********************** MODAL *************************************/
     function openModal(id) {
+      MODAL.mode = "edit";
       const card = (STATE.cards || []).find(c => String(c.id) === String(id));
       if (!card) return;
 
@@ -1924,6 +2012,9 @@
 
       modalTitle.textContent = card.name || 'Lead';
       modalSub.textContent = 'Fluxo: ' + card.fluxo + ' • ID: ' + card.id;
+      document.getElementById('fNome').value = card.name || '';
+document.getElementById('fTelefone').value = card.phone || '';
+document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
 
       fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
       fOrig.value = card.origem !== '—' ? (card.origem || '') : '';
@@ -2001,51 +2092,110 @@ async function deleteLead(id){
   if(error) throw error;
   return { ok: true };
 }
-    async function saveModal(){
-      if(!MODAL.card) return;
+async function saveModal(){
+  const fNome = document.getElementById('fNome');
+  const fTelefone = document.getElementById('fTelefone');
+  const fFluxo = document.getElementById('fFluxo');
+  const fResp = document.getElementById('fResponsavel');
+  const fOrig = document.getElementById('fOrigem');
+  const fMotivo = document.getElementById('fMotivo');
 
-      const fResp = document.getElementById('fResponsavel');
-      const fOrig = document.getElementById('fOrigem');
-      const fMotivo = document.getElementById('fMotivo');
-      if(!fResp || !fOrig || !fMotivo) return;
+  if(!fNome || !fTelefone || !fFluxo || !fResp || !fOrig || !fMotivo) return;
 
-      const card = MODAL.card;
-      const newFields = {
-        responsavel: (fResp.value || '').trim() || '—',
-        origem: (fOrig.value || '').trim() || '—',
-        motivo: (fMotivo.value || '').trim()
-      };
+  const nome = (fNome.value || "").trim();
+  const telefone = (fTelefone.value || "").trim();
+  const fluxo = (fFluxo.value || "Inicial").trim();
 
-      // otimista (estado local)
-      const old = { responsavel: card.responsavel, origem: card.origem, motivo: card.motivo };
-      card.responsavel = newFields.responsavel;
-      card.origem = newFields.origem;
-      card.motivo = newFields.motivo;
+  const newFields = {
+    responsavel: (fResp.value || '').trim() || '—',
+    origem: (fOrig.value || '').trim() || '—',
+    motivo: (fMotivo.value || '').trim()
+  };
 
-      closeModal();
+  // ===== MODO CRIAR =====
+  if(MODAL.mode === "create"){
+    if(!nome){
+      showToast("Nome obrigatório", "Digite o nome do lead", "warn");
+      return;
+    }
+
+    closeModal();
+    showToast("Criando…", nome, "info", 1800);
+
+    try{
+      const created = await createLead({
+        nome,
+        telefone,
+        fluxo,
+        responsavel: newFields.responsavel,
+        origem: newFields.origem,
+        motivo: newFields.motivo
+      });
+
+      // coloca no estado e renderiza sem precisar reload total
+      STATE.cards.unshift({
+        id: created.id,
+        name: nome,
+        phone: telefone,
+        origem: newFields.origem,
+        responsavel: newFields.responsavel,
+        manychat: '',
+        motivo: newFields.motivo,
+        fluxo,
+        horaLabel: '—',
+        stageTs: Date.now(),
+        sortTs: Date.now(),
+        ageSec: 0
+      });
+
+      updateMetrics();
+      populateFilters();
+
       if(VIEW === "kanban") renderBoard();
       if(VIEW === "dashboard") renderDashboard();
       if(VIEW === "reports") renderReports();
 
-      showToast("Salvando…", card.name, "info", 1800);
-
-      try{
-        await updateCardFields(card.id, newFields);
-        showToast("Atualizado", "Dados do lead salvos", "success", 2200);
-        populateFilters();
-      }catch(err){
-        // rollback
-        card.responsavel = old.responsavel;
-        card.origem = old.origem;
-        card.motivo = old.motivo;
-
-        if(VIEW === "kanban") renderBoard();
-        if(VIEW === "dashboard") renderDashboard();
-        if(VIEW === "reports") renderReports();
-
-        showToast("Falha ao salvar", String(err.message || err), "error", 5200);
-      }
+      showToast("Lead criado", nome, "success", 2400);
+    }catch(err){
+      showToast("Falha ao criar", String(err.message || err), "error", 5200);
     }
+
+    return;
+  }
+
+  // ===== MODO EDITAR (SEU FLUXO ATUAL) =====
+  if(!MODAL.card) return;
+
+  const card = MODAL.card;
+
+  const old = { responsavel: card.responsavel, origem: card.origem, motivo: card.motivo };
+  card.responsavel = newFields.responsavel;
+  card.origem = newFields.origem;
+  card.motivo = newFields.motivo;
+
+  closeModal();
+  if(VIEW === "kanban") renderBoard();
+  if(VIEW === "dashboard") renderDashboard();
+  if(VIEW === "reports") renderReports();
+
+  showToast("Salvando…", card.name, "info", 1800);
+
+  try{
+    await updateCardFields(card.id, newFields);
+    showToast("Atualizado", "Dados do lead salvos", "success", 2200);
+    populateFilters();
+  }catch(err){
+    card.responsavel = old.responsavel;
+    card.origem = old.origem;
+    card.motivo = old.motivo;
+
+    if(VIEW === "kanban") renderBoard();
+    if(VIEW === "dashboard") renderDashboard();
+    if(VIEW === "reports") renderReports();
+
+    showToast("Falha ao salvar", String(err.message || err), "error", 5200);
+  }
+}
 
     /*********************** SETTINGS (NOVA ABA) ************************/
     function syncSettingsUI(){
@@ -2404,3 +2554,4 @@ async function deleteLead(id){
   </script>
 </body>
 </html>
+
