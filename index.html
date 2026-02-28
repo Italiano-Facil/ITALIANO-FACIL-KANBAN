@@ -850,6 +850,9 @@
           <i class="ph ph-gear-six"></i> Configurações
         </button>
       </div>
+      <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
+  <i class="ph ph-user-plus"></i> Não atribuído
+</button>
 
       <div class="sidebar-bottom">
         <div class="userline">
@@ -927,6 +930,18 @@
             <i class="ph ph-hourglass-medium"></i> Carregando dados...
           </div>
         </main>
+        <main id="unassigned" class="reports hidden">
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
+      <button class="btn primary" type="button" onclick="renderUnassigned()">
+        <i class="ph ph-arrows-clockwise"></i> Atualizar lista
+      </button>
+    </div>
+
+    <div id="unassignedWrap"></div>
+  </div>
+</main>
 
         <main id="dashboard" class="dashboard hidden">
           <div class="chart-card">
@@ -1270,49 +1285,61 @@ async function protectWithAuth(){
     console.error(err);
     showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
   }
+  const navUn = document.getElementById("navUnassigned");
+if (navUn) {
+  navUn.classList.toggle("hidden", !AUTH.isAdmin);
+}
 }
     /*********************** VIEW **************************************/
-    function setView(which){
-      VIEW = which;
-      const board = document.getElementById('board');
-      const dash = document.getElementById('dashboard');
-      const reports = document.getElementById('reports');
-      const settings = document.getElementById('settings');
+function setView(which){
+  VIEW = which;
 
-      // nav reset
-      ['navKanban','navDash','navReports','navSettings'].forEach(id => document.getElementById(id)?.classList.remove('active'));
+  const board = document.getElementById('board');
+  const dash = document.getElementById('dashboard');
+  const reports = document.getElementById('reports');
+  const settings = document.getElementById('settings');
+  const unassigned = document.getElementById('unassigned');
 
-      // hide all
-      board.classList.add('hidden');
-      dash.classList.add('hidden');
-      reports.classList.add('hidden');
-      settings.classList.add('hidden');
+  ['navKanban','navDash','navReports','navSettings','navUnassigned']
+    .forEach(id => document.getElementById(id)?.classList.remove('active'));
 
-      if(which === 'dashboard'){
-        dash.classList.remove('hidden');
-        document.getElementById('navDash')?.classList.add('active');
-        renderDashboard();
-      }else if(which === 'reports'){
-        reports.classList.remove('hidden');
-        document.getElementById('navReports')?.classList.add('active');
-        renderReports();
-      }else if(which === 'settings'){
-        settings.classList.remove('hidden');
-        document.getElementById('navSettings')?.classList.add('active');
-        syncSettingsUI();
-      }else{
-        board.classList.remove('hidden');
-        document.getElementById('navKanban')?.classList.add('active');
-        renderBoard();
-      }
+  board.classList.add('hidden');
+  dash.classList.add('hidden');
+  reports.classList.add('hidden');
+  settings.classList.add('hidden');
+  unassigned?.classList.add('hidden');
+
+  if(which === 'dashboard'){
+    dash.classList.remove('hidden');
+    document.getElementById('navDash')?.classList.add('active');
+    renderDashboard();
+
+  }else if(which === 'reports'){
+    reports.classList.remove('hidden');
+    document.getElementById('navReports')?.classList.add('active');
+    renderReports();
+
+  }else if(which === 'settings'){
+    settings.classList.remove('hidden');
+    document.getElementById('navSettings')?.classList.add('active');
+    syncSettingsUI();
+
+  }else if(which === 'unassigned'){
+    if(!AUTH.isAdmin){
+      showToast("Acesso negado", "Apenas admin", "error");
+      setView("kanban");
+      return;
     }
+    unassigned?.classList.remove('hidden');
+    document.getElementById('navUnassigned')?.classList.add('active');
+    renderUnassigned();
 
-    function toggleView(){
-      const order = ["kanban","dashboard","reports","settings"];
-      const idx = Math.max(0, order.indexOf(VIEW));
-      const next = order[(idx + 1) % order.length];
-      setView(next);
-    }
+  }else{
+    board.classList.remove('hidden');
+    document.getElementById('navKanban')?.classList.add('active');
+    renderBoard();
+  }
+}
 
     /*********************** LISTENERS *********************************/
     function setupListeners(){
@@ -1348,6 +1375,17 @@ async function protectWithAuth(){
       if (btnExp) btnExp.addEventListener('click', () => exportMetrics());
     }
 
+    async function loadAtendentes(){
+  const { data, error } = await sb
+    .from("atendentes")
+    .select("id, nome, ativo")
+    .eq("ativo", true)
+    .order("nome", { ascending: true });
+
+  if(error) throw error;
+  return data || [];
+}
+
     /*********************** AUTO REFRESH ******************************/
     function setAutoRefresh(on){
       const label = document.getElementById('autoRefreshLabel');
@@ -1376,7 +1414,14 @@ async function protectWithAuth(){
         showError(res.error);
         return;
       }
-
+if (AUTH.isAdmin) {
+  try {
+    STATE.atendentes = await loadAtendentes();
+  } catch (e) {
+    console.warn("Falha ao carregar atendentes:", e);
+    STATE.atendentes = [];
+  }
+}
       STATE = res || STATE;
       updateMetrics();
       populateFilters();
@@ -1594,6 +1639,7 @@ const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1
       if(error) throw error;
       return { ok:true };
     }
+    
 
     async function updateCardFields(id, fields){
       const payload = {};
@@ -1745,6 +1791,156 @@ const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1
         showToast("Falha ao atualizar", String(err.message || err), "error", 5200);
       }
     }
+    function getUnassignedCards(){
+  return (STATE.cards || []).filter(c => {
+    const respTxt = String(c.responsavel || '').trim();
+    return (!respTxt || respTxt === '—' || respTxt.toLowerCase() === 'nao atribuido' || respTxt.toLowerCase() === 'não atribuído');
+  });
+}
+
+function renderUnassigned(){
+  if(!AUTH.isAdmin) return;
+
+  const wrap = document.getElementById("unassignedWrap");
+  if(!wrap) return;
+
+  const cards = getUnassignedCards().sort((a,b)=> b.sortTs - a.sortTs);
+  const atendentes = STATE.atendentes || [];
+
+  if(!cards.length){
+    wrap.innerHTML = `<div style="color:var(--muted); font-weight:900;">Nenhum lead não atribuído 🎯</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Lead</th>
+          <th>Telefone</th>
+          <th>Origem</th>
+          <th>Motivo</th>
+          <th>Fluxo</th>
+          <th>Atribuir para</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cards.map(c => `
+          <tr>
+            <td><b>${escapeHtml(c.name)}</b><div style="color:var(--muted); font-size:12px;">ID: ${escapeHtml(String(c.id))}</div></td>
+            <td>${escapeHtml(c.phone || "—")}</td>
+
+            <td>
+              <input class="input" style="width:180px" id="ua-origem-${c.id}" value="${escapeHtml(c.origem || '')}" />
+            </td>
+
+            <td>
+              <input class="input" style="width:220px" id="ua-motivo-${c.id}" value="${escapeHtml(c.motivo || '')}" />
+            </td>
+
+            <td>
+              <select class="input" style="width:160px" id="ua-fluxo-${c.id}">
+                ${KANBAN.STAGES.map(s => `
+                  <option value="${escapeHtml(s)}" ${String(c.fluxo)===String(s) ? "selected":""}>${escapeHtml(s)}</option>
+                `).join("")}
+              </select>
+            </td>
+
+            <td>
+              <select class="input" style="width:200px" id="ua-at-${c.id}">
+                <option value="">Selecionar atendente…</option>
+                ${atendentes.map(a => `
+                  <option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>
+                `).join("")}
+              </select>
+            </td>
+
+            <td>
+              <button class="btn primary" type="button" onclick="assignLead('${c.id}')">
+                <i class="ph ph-check"></i> Atribuir
+              </button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+    async function assignLead(leadId){
+  if(!AUTH.isAdmin){
+    showToast("Acesso negado", "Apenas admin", "error");
+    return;
+  }
+
+  const selAt = document.getElementById(`ua-at-${leadId}`);
+  const origemEl = document.getElementById(`ua-origem-${leadId}`);
+  const motivoEl = document.getElementById(`ua-motivo-${leadId}`);
+  const fluxoEl  = document.getElementById(`ua-fluxo-${leadId}`);
+
+  const atendenteId = selAt?.value;
+  const origem = (origemEl?.value || "—").trim() || "—";
+  const motivo = (motivoEl?.value || "").trim();
+  const fluxo = (fluxoEl?.value || "Inicial").trim();
+
+  if(!atendenteId){
+    showToast("Falta atendente", "Selecione um atendente", "warn");
+    return;
+  }
+
+  const atendente = (STATE.atendentes || []).find(a => String(a.id) === String(atendenteId));
+  const atendenteNome = atendente?.nome || "—";
+
+  const now = new Date();
+
+  // ✅ Ajuste os campos conforme teu banco REAL:
+  // - responsavel_id (id do atendente)
+  // - 'responsavel-id' (nome do atendente) -> teu front usa isso
+  // - 'origem-id', 'Motivo', 'fluxo-id'
+  const payload = {
+    responsavel_id: atendenteId,
+    "responsavel-id": atendenteNome,
+    "origem-id": origem,
+    "Motivo": motivo,
+    "fluxo-id": fluxo,
+    "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
+    "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
+  };
+
+  showToast("Atribuindo…", `${atendenteNome}`, "info", 1600);
+
+  try{
+    const { error } = await sb
+      .from(KANBAN.TABLE)
+      .update(payload)
+      .eq("id", leadId);
+
+    if(error) throw error;
+
+    // Atualiza STATE localmente (sem reload total)
+    const card = (STATE.cards || []).find(c => String(c.id) === String(leadId));
+    if(card){
+      card.responsavel = atendenteNome;
+      card.origem = origem;
+      card.motivo = motivo;
+      card.fluxo = fluxo;
+      card.sortTs = Date.now();
+      card.stageTs = Date.now();
+      card.ageSec = 0;
+    }
+
+    populateFilters();
+    updateMetrics();
+
+    // Re-renderiza a lista e o kanban
+    renderUnassigned();
+    if(VIEW === "kanban") renderBoard();
+
+    showToast("Atribuído ✅", `${card?.name || "Lead"} → ${atendenteNome}`, "success", 2400);
+  }catch(err){
+    showToast("Falha ao atribuir", String(err.message || err), "error", 5200);
+  }
+}
 
     /*********************** UI RENDER: DASH ****************************/
     function renderDashboard(){
@@ -2604,6 +2800,7 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
 
