@@ -1216,54 +1216,61 @@
     });
 
     /*********************** AUTH **************************************/
-    async function protectWithAuth(){
-      try{
-        const { data: { session } } = await sb.auth.getSession();
-        if (!session) {
-          window.location.href = "./login.html";
-          return;
-        }
-        const userInfo = document.getElementById("userInfo");
-        if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
+async function protectWithAuth(){
+  try{
+    const { data: { session }, error } = await sb.auth.getSession();
+    if(error) throw error;
 
-        const btnLogout = document.getElementById("btnLogout");
-        if (btnLogout) btnLogout.addEventListener("click", async () => {
-          await sb.auth.signOut();
-          window.location.href = "./login.html";
-        });
-      }catch(err){
-        showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
-      }
-      AUTH.session = session;
-
-const { data: atendente, error } = await sb
-  .from("atendentes")
-  .select("id, nome, manychat_name, ativo, is_admin")
-  .eq("auth_user_id", session.user.id)
-  .single();
-
-if (error || !atendente) {
-  showToast("Acesso negado", "Seu usuário não está vinculado a um atendente.", "error", 6000);
-  await sb.auth.signOut();
-  window.location.href = "./login.html";
-  return;
-}
-
-if (!atendente.ativo) {
-  showToast("Usuário inativo", "Fale com um administrador.", "error", 6000);
-  await sb.auth.signOut();
-  window.location.href = "./login.html";
-  return;
-}
-
-AUTH.atendente = atendente;
-AUTH.isAdmin = Boolean(atendente.is_admin);
-
-// Atualiza a linha do usuário no menu
-const userInfo = document.getElementById("userInfo");
-if (userInfo) userInfo.textContent = `👤 ${atendente.nome} • ${session.user.email}`;
+    if (!session) {
+      window.location.href = "./login.html";
+      return;
     }
 
+    AUTH.session = session;
+
+    // mostra user no menu
+    const userInfo = document.getElementById("userInfo");
+    if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
+
+    // busca atendente ligado ao usuário
+    const { data: atendente, error: e2 } = await sb
+      .from("atendentes")
+      .select("id, nome, manychat_name, ativo, is_admin, auth_user_id")
+      .eq("auth_user_id", session.user.id)
+      .maybeSingle();
+
+    if(e2) throw e2;
+
+    // ✅ se não achou atendente, não quebra o app
+    AUTH.atendente = atendente || null;
+    AUTH.atendenteId = atendente?.id || null;
+    AUTH.isAdmin = Boolean(atendente?.is_admin);
+
+    // fallback (temporário) pra você não travar
+    // troque pelo seu email
+    if (!AUTH.isAdmin && session.user.email === "SEU_EMAIL_AQUI") {
+      AUTH.isAdmin = true;
+    }
+
+    // logout
+    const btnLogout = document.getElementById("btnLogout");
+    if (btnLogout) btnLogout.addEventListener("click", async () => {
+      await sb.auth.signOut();
+      window.location.href = "./login.html";
+    });
+
+    console.log("AUTH:", {
+      email: session.user.email,
+      user_id: session.user.id,
+      atendente,
+      isAdmin: AUTH.isAdmin
+    });
+
+  }catch(err){
+    console.error(err);
+    showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
+  }
+}
     /*********************** VIEW **************************************/
     function setView(which){
       VIEW = which;
@@ -1438,36 +1445,7 @@ if (userInfo) userInfo.textContent = `👤 ${atendente.nome} • ${session.user.
     }
 
     /*********************** DATA LAYER ********************************/
-    async function getKanbanData(){
-      try{
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let fetchMore = true;
-
-        while(fetchMore){
-let q = sb
-  .from(KANBAN.TABLE)
-  .select("*");
-
-if (!AUTH.isAdmin) {
-  // ✅ aqui filtra para o atendente
-  q = q.eq("responsavel_id", AUTH.atendente.id);
-}
-
-const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
-
-          if(error) throw error;
-
-          if(data && data.length > 0){
-            allData = allData.concat(data);
-            if(data.length < pageSize) fetchMore = false;
-            else page++;
-          }else{
-            fetchMore = false;
-          }
-        }
-        async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo }){
+            async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo }){
   if(!KANBAN.STAGES.includes(fluxo)) fluxo = "Inicial";
 
   const now = new Date();
@@ -1494,6 +1472,39 @@ const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1
   if(error) throw error;
   return data; // { id }
 }
+
+    async function getKanbanData(){
+      try{
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let fetchMore = true;
+
+        while(fetchMore){
+let q = sb
+  .from(KANBAN.TABLE)
+  .select("*");
+
+if (!AUTH.isAdmin) {
+  if (!AUTH.atendenteId) {
+    // não tem vínculo com atendente -> não carrega nada e mostra erro amigável
+    return { error: "Seu usuário não está vinculado a um atendente (auth_user_id). Fale com o admin para vincular." };
+  }
+  q = q.eq("responsavel_id", AUTH.atendenteId);
+}
+
+const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if(error) throw error;
+
+          if(data && data.length > 0){
+            allData = allData.concat(data);
+            if(data.length < pageSize) fetchMore = false;
+            else page++;
+          }else{
+            fetchMore = false;
+          }
+        }
 
         const nowMs = Date.now();
         const stats = {};
@@ -2593,5 +2604,6 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
