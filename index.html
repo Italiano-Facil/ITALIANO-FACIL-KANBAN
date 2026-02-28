@@ -943,32 +943,56 @@
   </main>
 
   <!-- PRÉ-VENDAS -->
-  <main id="prevendas" class="page hidden">
-    <div class="chart-card" style="width:100%;">
-      <div class="chart-title">
-        <div class="left"><i class="ph ph-paper-plane-tilt"></i> Pré-vendas → Comercial</div>
-        <button class="btn primary" type="button" onclick="renderPreVendas()">
-          <i class="ph ph-arrows-clockwise"></i> Atualizar
-        </button>
-      </div>
-
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
-        <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar lead (nome/telefone)..." />
-        <select id="pvFilterStage" class="input" style="width:auto;">
-          <option value="">Todas etapas</option>
-          <option value="Inicial">Inicial</option>
-          <option value="A02">A02</option>
-          <option value="A03">A03</option>
-          <option value="A04">A04</option>
-          <option value="Link-Enviado">Link-Enviado</option>
-          <option value="Parabéns">Parabéns</option>
-        </select>
-        <span id="pvCount" class="pill">0</span>
-      </div>
-
-      <div id="prevendasWrap"></div>
+<main id="prevendas" class="page hidden">
+  <div class="chart-card" style="margin-bottom:14px;">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-user-plus"></i> Novo lead (Pré-vendas)</div>
+      <div class="pill">Total: <span id="pvCount">0</span></div>
     </div>
-  </main>
+
+    <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:12px;">
+      <input id="pvNome" class="input" placeholder="Nome do lead" />
+      <input id="pvTelefone" class="input" placeholder="Telefone/WhatsApp" />
+      <input id="pvOrigem" class="input" placeholder="Origem (ex: Insta, Indicação...)" />
+    </div>
+
+    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+      <select id="pvFluxo" class="input" style="width:auto;">
+        <option value="Inicial">Inicial</option>
+        <option value="A02">A02</option>
+        <option value="A03">A03</option>
+        <option value="A04">A04</option>
+        <option value="Link-Enviado">Link-Enviado</option>
+      </select>
+
+      <input id="pvMotivo" class="input" style="min-width:320px; flex:1;"
+             placeholder="Observação rápida (o que a pessoa quer?)" />
+
+      <button class="btn primary" type="button" onclick="pvCreateLead()">
+        <i class="ph ph-plus"></i> Cadastrar lead
+      </button>
+    </div>
+
+    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+      <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar nos meus leads..." />
+      <select id="pvFilterStage" class="input" style="width:auto;">
+        <option value="">Todas etapas</option>
+        <option value="Inicial">Inicial</option>
+        <option value="A02">A02</option>
+        <option value="A03">A03</option>
+        <option value="A04">A04</option>
+        <option value="Link-Enviado">Link-Enviado</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-list-bullets"></i> Meus leads de pré-vendas</div>
+    </div>
+    <div id="prevendasWrap"></div>
+  </div>
+</main>
 
   <!-- NÃO ATRIBUÍDO -->
   <main id="unassigned" class="page hidden">
@@ -1331,6 +1355,37 @@ async function protectWithAuth(){
 if (navUn) {
   navUn.classList.toggle("hidden", !AUTH.isAdmin);
 }
+}async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo, createdRole = null }){
+  if(!KANBAN.STAGES.includes(fluxo)) fluxo = "Inicial";
+
+  const now = new Date();
+
+  const payload = {
+    nome: nome,
+    telefone: telefone,
+    "fluxo-id": fluxo,
+    "responsavel-id": responsavel || "—",
+    "origem-id": origem || "—",
+    "Motivo": motivo || "",
+    "Data": now.toLocaleDateString("pt-BR"),
+    "Hora-entrada": now.toLocaleTimeString("pt-BR"),
+    "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
+    "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
+
+    // 🔥 autoria (opcional, mas recomendado)
+    created_by_auth: AUTH.session?.user?.id || null,
+    created_by_atendente_id: AUTH.atendenteId || null,
+    created_by_role: createdRole || null,
+  };
+
+  const { data, error } = await sb
+    .from(KANBAN.TABLE)
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if(error) throw error;
+  return data; // { id }
 }
     async function renderPreVendas(){
   const wrap = document.getElementById("prevendasWrap");
@@ -1339,11 +1394,7 @@ if (navUn) {
 
   // leads disponíveis: aqui você define a regra.
   // Sugestão: pré-vendas trabalha com Inicial/A02 (ajuste se quiser)
-  const base = (STATE.cards || []).filter(c => {
-    // não mostrar Parabéns por padrão
-    if(String(c.fluxo).toLowerCase() === "parabéns") return false;
-    return true;
-  });
+const base = getPreVendasCards();
 
   const cards = base
     .filter(c => !PV.stage || String(c.fluxo) === String(PV.stage))
@@ -1740,6 +1791,18 @@ async function reload(){
     'Hora-entrada': now.toLocaleTimeString('pt-BR'),
     'Data da mudança do fluxo': now.toLocaleDateString('pt-BR'),
     'Hora da mudança do fluxo': now.toLocaleTimeString('pt-BR'),
+
+    const payload = {
+  nome: nome,
+  telefone: telefone,
+  'fluxo-id': fluxo,
+  'responsavel-id': responsavel || '—',
+  'origem-id': origem || '—',
+  'Motivo': motivo || '',
+  created_by_auth: AUTH.session?.user?.id || null,
+  created_by_atendente_id: AUTH.atendenteId || null,
+  created_by_role: "prevendas",
+};
   };
 
   const { data, error } = await sb
@@ -1827,7 +1890,10 @@ const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1
             horaLabel: formatHora_(horaEntrada),
             stageTs: stageTs || 0,
             sortTs: sortTs || 0,
-            ageSec
+            ageSec,
+            created_by_auth: row.created_by_auth,
+created_by_atendente_id: row.created_by_atendente_id,
+created_by_role: row.created_by_role,
           });
         }
 
@@ -1854,6 +1920,10 @@ const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1
         return { error: String(err.message || err) };
       }
     }
+    function getPreVendasCards(){
+  const uid = AUTH.session?.user?.id;
+  return (STATE.cards || []).filter(c => String(c.created_by_auth || "") === String(uid));
+}
 
     async function updateCardStage(id, newStage){
       if(!KANBAN.STAGES.includes(newStage)) throw new Error('Stage inválido.');
@@ -2668,14 +2738,12 @@ async function saveModal(){
     showToast("Criando…", nome, "info", 1800);
 
     try{
-      const created = await createLead({
-        nome,
-        telefone,
-        fluxo,
-        responsavel: newFields.responsavel,
-        origem: newFields.origem,
-        motivo: newFields.motivo
-      });
+const created = await createLead({
+  nome, telefone, fluxo,
+  responsavel: AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas",
+  origem, motivo,
+  createdRole: "prevendas"
+});
 
       // coloca no estado e renderiza sem precisar reload total
       STATE.cards.unshift({
@@ -3099,6 +3167,7 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
 
