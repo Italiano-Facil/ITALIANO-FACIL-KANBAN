@@ -1162,14 +1162,18 @@
     <option value="Parabéns">Parabéns</option>
   </select>
 </div>
-        <div class="field">
-          <label>Responsável</label>
-          <input id="fResponsavel" type="text" />
-        </div>
-        <div class="field">
-          <label>Origem</label>
-          <input id="fOrigem" type="text" />
-        </div>
+<select id="fResponsavel" class="input" style="border-radius:14px;">
+  <option value="">Selecionar atendente…</option>
+</select>
+       <select id="fOrigem" class="input" style="border-radius:14px;">
+  <option value="META">META</option>
+  <option value="Google">Google</option>
+  <option value="Bio/Instagram">Bio/Instagram</option>
+  <option value="Não identificado">Não identificado</option>
+  <option value="Formulário Elementor">Formulário Elementor</option>
+  <option value="DM/Instagram">DM/Instagram</option>
+  <option value="Outros">Outros</option>
+</select>
         <div class="field">
           <label>Observação (Motivo)</label>
           <textarea id="fMotivo" rows="4"></textarea>
@@ -1962,6 +1966,18 @@ created_by_role: row.created_by_role,
     function getPreVendasCards(){
   const uid = AUTH.session?.user?.id;
   return (STATE.cards || []).filter(c => String(c.created_by_auth || "") === String(uid));
+}
+    async function fillAtendentesSelect(){
+  const sel = document.getElementById("fResponsavel");
+  if(!sel) return;
+
+  // se não for admin, deixa ele mesmo (ou vazio) – você decide
+  const atendentes = AUTH.isAdmin ? (STATE.atendentes || []) : (AUTH.atendente ? [AUTH.atendente] : []);
+
+  sel.innerHTML = `<option value="">Selecionar atendente…</option>` + atendentes.map(a => {
+    const nome = a.manychat_name || a.nome || "";
+    return `<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`;
+  }).join("");
 }
 
     async function updateCardStage(id, newStage){
@@ -2758,11 +2774,11 @@ async function saveModal(){
   const telefone = (fTelefone.value || "").trim();
   const fluxo = (fFluxo.value || "Inicial").trim();
 
-  const newFields = {
-    responsavel: (fResp.value || '').trim() || '—',
-    origem: (fOrig.value || '').trim() || '—',
-    motivo: (fMotivo.value || '').trim()
-  };
+const newFields = {
+  responsavel: (fResp.value || '').trim() || '—',
+  origem: (fOrig.value || '').trim() || '—',
+  motivo: (fMotivo.value || '').trim()
+};
 
   // ===== MODO CRIAR =====
   if(MODAL.mode === "create"){
@@ -2775,15 +2791,15 @@ async function saveModal(){
     showToast("Criando…", nome, "info", 1800);
 
     try{
-      const created = await createLead({
-        nome,
-        telefone,
-        fluxo,
-        responsavel: newFields.responsavel,
-        origem: newFields.origem,
-        motivo: newFields.motivo,
-        createdRole: "prevendas"
-      });
+const created = await createLead({
+  nome,
+  telefone,
+  fluxo,
+  responsavel: newFields.responsavel,
+  origem: newFields.origem,
+  motivo: newFields.motivo,
+  createdRole: "prevendas"
+});
 
       STATE.cards.unshift({
         id: created.id,
@@ -3209,6 +3225,7 @@ await updateCardFields(card.id, newFields);
   </script>
 </body>
 </html>
+
 
 
 
