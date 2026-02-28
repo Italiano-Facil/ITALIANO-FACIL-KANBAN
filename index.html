@@ -1962,32 +1962,39 @@ for(const s of KANBAN.STAGES){
 }
 
 async function deleteLeadWithPassword_(leadId, password){
+  // debug pra ajudar na hora
   console.log("DEBUG delete:", { table: KANBAN.TABLE, idCol: KANBAN.ID_COL, leadId });
 
-  if(leadId == null) throw new Error("Lead sem ID (leadId undefined/null).");
+  if (leadId == null) throw new Error("Lead sem ID (leadId undefined/null).");
 
+  // pega usuário atual
   const { data: userRes, error: userErr } = await sb.auth.getUser();
-  if(userErr) throw userErr;
+  if (userErr) throw userErr;
 
   const email = userRes?.user?.email;
-  if(!email) throw new Error("Sessão sem email. Faça login novamente.");
+  if (!email) throw new Error("Sessão sem email. Faça login novamente.");
 
+  // reautentica com a senha fornecida
   const { error: authErr } = await sb.auth.signInWithPassword({ email, password });
-  if(authErr) throw new Error("Senha incorreta. Exclusão bloqueada.");
+  if (authErr) throw new Error("Senha incorreta. Exclusão bloqueada.");
 
+  const idCol = (KANBAN && KANBAN.ID_COL) ? KANBAN.ID_COL : "id";
+
+  // deleta no banco
   const { error: delErr } = await sb
     .from(KANBAN.TABLE)
     .delete()
-    .eq(KANBAN.ID_COL, leadId);
+    .eq(idCol, leadId);
 
-  if(delErr) throw delErr;
+  if (delErr) throw delErr;
 
+  // atualiza estado local e UI
   STATE.cards = (STATE.cards || []).filter(c => String(c.id) !== String(leadId));
 
   closeModal();
-  if(VIEW === "kanban") renderBoard();
-  if(VIEW === "dashboard") renderDashboard();
-  if(VIEW === "reports") renderReports();
+  if (VIEW === "kanban") renderBoard();
+  if (VIEW === "dashboard") renderDashboard();
+  if (VIEW === "reports") renderReports();
   updateMetrics();
 
   showToast("Lead excluído", "Registro removido com sucesso", "success", 2400);
@@ -2463,6 +2470,7 @@ function askPasswordModal_(){
 </body>
 
 </html>
+
 
 
 
