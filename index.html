@@ -836,6 +836,9 @@
         <button id="navKanban" class="active" type="button" onclick="setView('kanban')">
           <i class="ph ph-kanban"></i> Kanban
         </button>
+              <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
+  <i class="ph ph-user-plus"></i> Não atribuído
+</button>
         <button id="navDash" type="button" onclick="setView('dashboard')">
           <i class="ph ph-chart-bar"></i> Dashboard
         </button>
@@ -850,9 +853,6 @@
           <i class="ph ph-gear-six"></i> Configurações
         </button>
       </div>
-      <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
-  <i class="ph ph-user-plus"></i> Não atribuído
-</button>
 
       <div class="sidebar-bottom">
         <div class="userline">
@@ -934,7 +934,7 @@
   <div class="chart-card">
     <div class="chart-title">
       <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
-      <button class="btn primary" type="button" onclick="renderUnassigned()">
+<button class="btn primary" type="button" onclick="reload()">
         <i class="ph ph-arrows-clockwise"></i> Atualizar lista
       </button>
     </div>
@@ -1403,37 +1403,43 @@ function setView(which){
     }
 
     /*********************** RELOAD ************************************/
-    async function reload(){
-      const board = document.getElementById('board');
-      if(STATE.stages.length === 0 && board){
-        board.innerHTML = '<div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;"><i class="ph ph-hourglass-medium"></i> Sincronizando...</div>';
-      }
-
-      const res = await getKanbanData();
-      if(res && res.error){
-        showError(res.error);
-        return;
-      }
-if (AUTH.isAdmin) {
-  try {
-    STATE.atendentes = await loadAtendentes();
-  } catch (e) {
-    console.warn("Falha ao carregar atendentes:", e);
-    STATE.atendentes = [];
+async function reload(){
+  const board = document.getElementById('board');
+  if(STATE.stages.length === 0 && board){
+    board.innerHTML = '<div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;"><i class="ph ph-hourglass-medium"></i> Sincronizando...</div>';
   }
-}
-      STATE = res || STATE;
-      updateMetrics();
-      populateFilters();
 
-      if(VIEW === "dashboard") renderDashboard();
-      else if(VIEW === "reports") renderReports();
-      else if(VIEW === "settings") syncSettingsUI();
-      else renderBoard();
+  const res = await getKanbanData();
+  if(res && res.error){
+    showError(res.error);
+    return;
+  }
 
-      startLiveTimers();
-      showToast("Atualizado", "Dados sincronizados com sucesso", "success", 2200);
+  // ✅ primeiro seta o STATE com os dados do kanban
+  STATE = res || STATE;
+
+  // ✅ depois carrega atendentes (e não perde mais)
+  if (AUTH.isAdmin) {
+    try {
+      STATE.atendentes = await loadAtendentes();
+    } catch (e) {
+      console.warn("Falha ao carregar atendentes:", e);
+      STATE.atendentes = [];
     }
+  }
+
+  updateMetrics();
+  populateFilters();
+
+  if(VIEW === "dashboard") renderDashboard();
+  else if(VIEW === "reports") renderReports();
+  else if(VIEW === "settings") syncSettingsUI();
+  else if(VIEW === "unassigned") renderUnassigned();
+  else renderBoard();
+
+  startLiveTimers();
+  showToast("Atualizado", "Dados sincronizados com sucesso", "success", 2200);
+}
 
     function showError(msg){
       const board = document.getElementById('board');
@@ -1535,7 +1541,7 @@ if (!AUTH.isAdmin) {
     // não tem vínculo com atendente -> não carrega nada e mostra erro amigável
     return { error: "Seu usuário não está vinculado a um atendente (auth_user_id). Fale com o admin para vincular." };
   }
-  q = q.eq("responsavel_id", AUTH.atendenteId);
+q = q.eq("responsavel-id", AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "");
 }
 
 const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
@@ -2800,6 +2806,7 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
 
