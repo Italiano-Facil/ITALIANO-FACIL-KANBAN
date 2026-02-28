@@ -1057,7 +1057,7 @@
         </div>
         <button class="iconbtn" type="button" onclick="closeModal()"><i class="ph ph-x"></i></button>
       </div>
-
+      
       <div class="modal-body">
         <div class="field">
           <label>Responsável</label>
@@ -1081,6 +1081,9 @@
         </div>
         <div class="modal-right">
           <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
+            <button class="btn danger" type="button" onclick="deleteFromModal()">
+    <i class="ph ph-trash"></i> Excluir
+  </button>
           <button class="btn primary" type="button" onclick="saveModal()">
             <i class="ph ph-floppy-disk"></i> Salvar
           </button>
@@ -1147,7 +1150,7 @@
 
     /*********************** KANBAN CONFIG *****************************/
     const KANBAN = {
-      TABLE: "Leads-Geral1", 
+      TABLE: "Leads-Geral1",
       STAGES: ['Inicial', 'A02', 'A03', 'A04', 'Link-Enviado', 'Parabéns'],
       SLA: { warnMin: 30, dangerMin: 60 }
     };
@@ -1941,7 +1944,63 @@
       MODAL.open = false;
       MODAL.card = null;
     }
+async function deleteFromModal(){
+  if(!MODAL.card){
+    showToast("Nenhum lead selecionado", "", "error");
+    return;
+  }
 
+  const card = MODAL.card;
+
+  const ok = confirm(
+    `Excluir este lead?\n\n` +
+    `${card.name}\n` +
+    `ID: ${card.id}\n\n` +
+    `Essa ação NÃO pode ser desfeita.`
+  );
+  if(!ok) return;
+
+  // Fecha modal pra não ficar preso na tela
+  closeModal();
+
+  // otimista: remove da UI imediatamente
+  const oldCards = STATE.cards.slice();
+  STATE.cards = STATE.cards.filter(x => String(x.id) !== String(card.id));
+
+  if(VIEW === "kanban") renderBoard();
+  if(VIEW === "dashboard") renderDashboard();
+  if(VIEW === "reports") renderReports();
+
+  showToast("Excluindo…", card.name, "info", 1800);
+
+  try{
+    await deleteLead(card.id);
+
+    updateMetrics();
+    populateFilters();
+
+    showToast("Excluído", card.name, "success", 2400);
+  }catch(err){
+    // rollback
+    STATE.cards = oldCards;
+
+    if(VIEW === "kanban") renderBoard();
+    if(VIEW === "dashboard") renderDashboard();
+    if(VIEW === "reports") renderReports();
+
+    showToast("Falha ao excluir", String(err.message || err), "error", 5200);
+  }
+}
+
+async function deleteLead(id){
+  const { error } = await sb
+    .from(KANBAN.TABLE)
+    .delete()
+    .eq('id', id);
+
+  if(error) throw error;
+  return { ok: true };
+}
     async function saveModal(){
       if(!MODAL.card) return;
 
@@ -2344,5 +2403,4 @@
     }
   </script>
 </body>
-
 </html>
