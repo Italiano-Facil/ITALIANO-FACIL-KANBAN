@@ -1193,6 +1193,11 @@
     let MODAL = { open: false, card: null, mode: "edit" }; // "edit" | "create"
     let charts = { funil: null, consultor: null, sla: null, links: null, conversao: null, funilVendedor: null };
     let VIEW = "kanban";
+    let AUTH = {
+  session: null,
+  atendente: null,
+  isAdmin: false,
+};
 
     // settings locais
     const SETTINGS = {
@@ -1229,6 +1234,34 @@
       }catch(err){
         showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
       }
+      AUTH.session = session;
+
+const { data: atendente, error } = await sb
+  .from("atendentes")
+  .select("id, nome, manychat_name, ativo, is_admin")
+  .eq("auth_user_id", session.user.id)
+  .single();
+
+if (error || !atendente) {
+  showToast("Acesso negado", "Seu usuário não está vinculado a um atendente.", "error", 6000);
+  await sb.auth.signOut();
+  window.location.href = "./login.html";
+  return;
+}
+
+if (!atendente.ativo) {
+  showToast("Usuário inativo", "Fale com um administrador.", "error", 6000);
+  await sb.auth.signOut();
+  window.location.href = "./login.html";
+  return;
+}
+
+AUTH.atendente = atendente;
+AUTH.isAdmin = Boolean(atendente.is_admin);
+
+// Atualiza a linha do usuário no menu
+const userInfo = document.getElementById("userInfo");
+if (userInfo) userInfo.textContent = `👤 ${atendente.nome} • ${session.user.email}`;
     }
 
     /*********************** VIEW **************************************/
@@ -1413,10 +1446,16 @@
         let fetchMore = true;
 
         while(fetchMore){
-          const { data, error } = await sb
-            .from(KANBAN.TABLE)
-            .select('*')
-            .range(page * pageSize, (page + 1) * pageSize - 1);
+let q = sb
+  .from(KANBAN.TABLE)
+  .select("*");
+
+if (!AUTH.isAdmin) {
+  // ✅ aqui filtra para o atendente
+  q = q.eq("responsavel_id", AUTH.atendente.id);
+}
+
+const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
 
           if(error) throw error;
 
@@ -2554,4 +2593,5 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
