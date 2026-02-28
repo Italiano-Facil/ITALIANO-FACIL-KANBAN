@@ -931,14 +931,15 @@
         <main id="board" class="board">
           <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
             <i class="ph ph-hourglass-medium"></i> Carregando dados...
-            <main id="prevendas" class="reports hidden">
+
+        <i class="ph ph-arrows-clockwise"></i> Atualizar
+      </button>
+    </div>
+          <main id="prevendas" class="reports hidden">
   <div class="chart-card">
     <div class="chart-title">
       <div class="left"><i class="ph ph-paper-plane-tilt"></i> Pré-vendas → Comercial</div>
       <button class="btn primary" type="button" onclick="renderPreVendas()">
-        <i class="ph ph-arrows-clockwise"></i> Atualizar
-      </button>
-    </div>
 
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
       <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar lead (nome/telefone)..." />
@@ -1447,6 +1448,7 @@ if (navUn) {
     /*********************** VIEW **************************************/
 function setView(which){
   VIEW = which;
+
   const prevendas = document.getElementById('prevendas');
   const board = document.getElementById('board');
   const dash = document.getElementById('dashboard');
@@ -1457,33 +1459,42 @@ function setView(which){
   ['navKanban','navDash','navReports','navSettings','navUnassigned','navPreVendas']
     .forEach(id => document.getElementById(id)?.classList.remove('active'));
 
-  board.classList.add('hidden');
-  dash.classList.add('hidden');
-  reports.classList.add('hidden');
-  settings.classList.add('hidden');
+  board?.classList.add('hidden');
+  dash?.classList.add('hidden');
+  reports?.classList.add('hidden');
+  settings?.classList.add('hidden');
   unassigned?.classList.add('hidden');
   prevendas?.classList.add('hidden');
 
   if(which === 'dashboard'){
-    dash.classList.remove('hidden');
+    dash?.classList.remove('hidden');
     document.getElementById('navDash')?.classList.add('active');
     renderDashboard();
-}else if(which === 'prevendas'){
-  prevendas?.classList.remove('hidden');
-  document.getElementById('navPreVendas')?.classList.add('active');
-  renderPreVendas();
-}
-  }else if(which === 'reports'){
-    reports.classList.remove('hidden');
+    return;
+  }
+
+  if(which === 'prevendas'){
+    prevendas?.classList.remove('hidden');
+    document.getElementById('navPreVendas')?.classList.add('active');
+    renderPreVendas();
+    return;
+  }
+
+  if(which === 'reports'){
+    reports?.classList.remove('hidden');
     document.getElementById('navReports')?.classList.add('active');
     renderReports();
+    return;
+  }
 
-  }else if(which === 'settings'){
-    settings.classList.remove('hidden');
+  if(which === 'settings'){
+    settings?.classList.remove('hidden');
     document.getElementById('navSettings')?.classList.add('active');
     syncSettingsUI();
+    return;
+  }
 
-  }else if(which === 'unassigned'){
+  if(which === 'unassigned'){
     if(!AUTH.isAdmin){
       showToast("Acesso negado", "Apenas admin", "error");
       setView("kanban");
@@ -1492,14 +1503,14 @@ function setView(which){
     unassigned?.classList.remove('hidden');
     document.getElementById('navUnassigned')?.classList.add('active');
     renderUnassigned();
-
-  }else{
-    board.classList.remove('hidden');
-    document.getElementById('navKanban')?.classList.add('active');
-    renderBoard();
+    return;
   }
-}
 
+  // default: kanban
+  board?.classList.remove('hidden');
+  document.getElementById('navKanban')?.classList.add('active');
+  renderBoard();
+}
     /*********************** LISTENERS *********************************/
     function setupListeners(){
       document.getElementById('search')?.addEventListener('input', (e) => {
@@ -1572,7 +1583,7 @@ async function reload(){
   if(res && res.error){
     showError(res.error);
     return;
-    await checkHandoffPopup();
+
   }
 
   // ✅ primeiro seta o STATE com os dados do kanban
@@ -1587,7 +1598,7 @@ async function reload(){
       STATE.atendentes = [];
     }
   }
-
+  await checkHandoffPopup();
   updateMetrics();
   populateFilters();
 
@@ -2522,28 +2533,38 @@ document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
       MODAL.open = false;
       MODAL.card = null;
     }
-    function openHandoffModal(handoff) {
+function openHandoffModal(handoff) {
   const overlay = document.getElementById("modalOverlay");
-  const modal = document.getElementById("modal");
+  const modal = overlay?.querySelector(".modal"); // ✅ pega pelo class
+
+  if(!overlay || !modal){
+    showToast("Erro", "Modal não encontrado no HTML", "error");
+    return;
+  }
 
   overlay.classList.remove("hidden");
 
   modal.innerHTML = `
-    <div class="modal-card">
-      <h2>Novo Lead do Pré-vendas</h2>
-      <p><strong>Nota:</strong></p>
-      <div style="margin:10px 0; padding:12px; background:#111; border-radius:10px;">
-        ${escapeHtml(handoff.nota)}
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Novo Lead do Pré-vendas</div>
+        <div class="modal-sub">Encaminhamento pendente</div>
       </div>
+      <button class="iconbtn" type="button" onclick="closeModal()"><i class="ph ph-x"></i></button>
+    </div>
 
-      <div style="display:flex; gap:10px; margin-top:20px;">
-        <button class="btn primary" onclick="acceptHandoff('${handoff.id}')">
-          Aceitar
-        </button>
+    <div class="modal-body">
+      <div class="field">
+        <label>Nota</label>
+        <textarea rows="5" readonly>${escapeHtml(handoff.nota || "")}</textarea>
+      </div>
+    </div>
 
-        <button class="btn danger" onclick="rejectHandoff('${handoff.id}')">
-          Recusar
-        </button>
+    <div class="modal-footer">
+      <div></div>
+      <div class="modal-right">
+        <button class="btn danger" onclick="rejectHandoff('${handoff.id}')">Recusar</button>
+        <button class="btn primary" onclick="acceptHandoff('${handoff.id}')">Aceitar</button>
       </div>
     </div>
   `;
@@ -3067,6 +3088,7 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
 
