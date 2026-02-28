@@ -1388,79 +1388,102 @@ async function protectWithAuth(){
     }
 
     /*********************** DATA LAYER ********************************/
-    async function getKanbanData(){
-      try{
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let fetchMore = true;
+   async function getKanbanData(){
+  try{
+    let allData = [];
+    let page = 0;
+    const pageSize = 1000;
+    let fetchMore = true;
 
-        while(fetchMore){
-          const { data, error } = await sb
-            .from(KANBAN.TABLE)
-            .select('*')
-            .range(page * pageSize, (page + 1) * pageSize - 1);
+    while(fetchMore){
+      const { data, error } = await sb
+        .from(KANBAN.TABLE)
+        .select('*')
+        .range(page * pageSize, (page + 1) * pageSize - 1);
 
-          if(error) throw error;
+      if(error) throw error;
 
-          if(data && data.length > 0){
-            allData = allData.concat(data);
-            if(data.length < pageSize) fetchMore = false;
-            else page++;
-          }else{
-            fetchMore = false;
-          }
-        }
+      if(data && data.length > 0){
+        allData = allData.concat(data);
+        if(data.length < pageSize) fetchMore = false;
+        else page++;
+      }else{
+        fetchMore = false;
+      }
+    }
 
-        const nowMs = Date.now();
-        const stats = {};
-        for(const s of KANBAN.STAGES) stats[s] = { count:0, sumSec:0 };
+    const nowMs = Date.now();
+    const stats = {};
+    for(const s of KANBAN.STAGES) stats[s] = { count:0, sumSec:0 };
 
-        const responsaveisSet = new Set();
-        const origensSet = new Set();
-        const cards = [];
+    const responsaveisSet = new Set();
+    const origensSet = new Set();
+    const cards = [];
 
-for(const row of allData){
-  if(!row.nome || String(row.nome).trim() === '') continue;
+    for(const row of allData){
+      if(!row.nome || String(row.nome).trim() === '') continue;
 
-  const fluxoRaw = String(row['fluxo-id'] || '').trim();
-  const stage = KANBAN.STAGES.includes(fluxoRaw) ? fluxoRaw : 'Inicial';
+      const fluxoRaw = String(row['fluxo-id'] || '').trim();
+      const stage = KANBAN.STAGES.includes(fluxoRaw) ? fluxoRaw : 'Inicial';
 
-  const horaEntrada = row['Hora-entrada'] || row['Hora entrada'];
-  const entryTs  = buildTs(row['Data'], horaEntrada);
-  const changeTs = buildTs(row['Data da mudança do fluxo'], row['Hora da mudança do fluxo']);
+      const horaEntrada = row['Hora-entrada'] || row['Hora entrada'];
+      const entryTs  = buildTs(row['Data'], horaEntrada);
+      const changeTs = buildTs(row['Data da mudança do fluxo'], row['Hora da mudança do fluxo']);
 
-  const stageTs = (stage === 'Inicial') ? entryTs : (changeTs || entryTs);
-  const sortTs  = changeTs || entryTs;
-  const ageSec  = stageTs ? Math.max(0, Math.floor((nowMs - stageTs) / 1000)) : 0;
+      const stageTs = (stage === 'Inicial') ? entryTs : (changeTs || entryTs);
+      const sortTs  = changeTs || entryTs;
+      const ageSec  = stageTs ? Math.max(0, Math.floor((nowMs - stageTs) / 1000)) : 0;
 
-  stats[stage].count += 1;
-  stats[stage].sumSec += ageSec;
+      stats[stage].count += 1;
+      stats[stage].sumSec += ageSec;
 
-  const resp = safe_(row['responsavel-id'], '—');
-  const orig = safe_(row['origem-id'], '—');
-  if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
-  if(orig !== '—' && orig !== '') origensSet.add(orig);
+      const resp = safe_(row['responsavel-id'], '—');
+      const orig = safe_(row['origem-id'], '—');
+      if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
+      if(orig !== '—' && orig !== '') origensSet.add(orig);
 
-  const rowId = row.id;
-  if (rowId == null) continue;
+      const rowId = row.id;
+      if (rowId == null) continue;
 
-  cards.push({
-    id: rowId,
-    name: safe_(row.nome, '(Sem nome)'),
-    phone: safe_(row.telefone, ''),
-    origem: orig,
-    responsavel: resp,
-    manychat: safe_(row['Manychat_id'], ''),
-    motivo: safe_(row['Motivo'], ''),
-    fluxo: stage,
-    horaLabel: formatHora_(horaEntrada),
-    stageTs: stageTs || 0,
-    sortTs: sortTs || 0,
-    ageSec
-  });
-} 
+      cards.push({
+        id: rowId,
+        name: safe_(row.nome, '(Sem nome)'),
+        phone: safe_(row.telefone, ''),
+        origem: orig,
+        responsavel: resp,
+        manychat: safe_(row['Manychat_id'], ''),
+        motivo: safe_(row['Motivo'], ''),
+        fluxo: stage,
+        horaLabel: formatHora_(horaEntrada),
+        stageTs: stageTs || 0,
+        sortTs: sortTs || 0,
+        ageSec
+      });
+    }
 
+    const stageAverages = {};
+    for(const s of KANBAN.STAGES){
+      stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
+    }
+
+    return {
+      stages: KANBAN.STAGES,
+      cards,
+      filters: {
+        responsaveis: Array.from(responsaveisSet).sort(),
+        origens: Array.from(origensSet).sort()
+      },
+      meta: {
+        updatedAt: new Date().toISOString(),
+        total: cards.length,
+        stageAverages,
+        sla: { warnMin: SETTINGS.slaWarnMin, dangerMin: SETTINGS.slaDangerMin }
+      }
+    };
+  }catch(err){
+    return { error: String(err?.message || err) };
+  }
+}
 const stageAverages = {};
 for(const s of KANBAN.STAGES){
   stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
@@ -2462,6 +2485,7 @@ function askPasswordModal_(){
 </body>
 
 </html>
+
 
 
 
