@@ -1420,66 +1420,52 @@ async function protectWithAuth(){
         const origensSet = new Set();
         const cards = [];
 
-        for(const row of allData){
-          if(!row.nome || String(row.nome).trim() === '') continue;
+for(const row of allData){
+  if(!row.nome || String(row.nome).trim() === '') continue;
 
-          const fluxoRaw = String(row['fluxo-id'] || '').trim();
-          const stage = KANBAN.STAGES.includes(fluxoRaw) ? fluxoRaw : 'Inicial';
+  const fluxoRaw = String(row['fluxo-id'] || '').trim();
+  const stage = KANBAN.STAGES.includes(fluxoRaw) ? fluxoRaw : 'Inicial';
 
-          const horaEntrada = row['Hora-entrada'] || row['Hora entrada'];
-          const entryTs  = buildTs(row['Data'], horaEntrada);
-          const changeTs = buildTs(row['Data da mudança do fluxo'], row['Hora da mudança do fluxo']);
+  const horaEntrada = row['Hora-entrada'] || row['Hora entrada'];
+  const entryTs  = buildTs(row['Data'], horaEntrada);
+  const changeTs = buildTs(row['Data da mudança do fluxo'], row['Hora da mudança do fluxo']);
 
-          const stageTs = (stage === 'Inicial') ? entryTs : (changeTs || entryTs);
-          const sortTs  = changeTs || entryTs;
-          const ageSec  = stageTs ? Math.max(0, Math.floor((nowMs - stageTs) / 1000)) : 0;
+  const stageTs = (stage === 'Inicial') ? entryTs : (changeTs || entryTs);
+  const sortTs  = changeTs || entryTs;
+  const ageSec  = stageTs ? Math.max(0, Math.floor((nowMs - stageTs) / 1000)) : 0;
 
-          stats[stage].count += 1;
-          stats[stage].sumSec += ageSec;
+  stats[stage].count += 1;
+  stats[stage].sumSec += ageSec;
 
-          const resp = safe_(row['responsavel-id'], '—');
-          const orig = safe_(row['origem-id'], '—');
-          if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
-          if(orig !== '—' && orig !== '') origensSet.add(orig);
-  
-const rowId = row.id;     // id real do banco
-if (rowId == null) continue; // pula se vier sem id
+  const resp = safe_(row['responsavel-id'], '—');
+  const orig = safe_(row['origem-id'], '—');
+  if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
+  if(orig !== '—' && orig !== '') origensSet.add(orig);
 
-cards.push({
-  id: rowId,
-  name: safe_(row.nome, '(Sem nome)'),
-  phone: safe_(row.telefone, ''),
-  origem: orig,
-  responsavel: resp,
-  manychat: safe_(row['Manychat_id'], ''),
-  motivo: safe_(row['Motivo'], ''),
-  fluxo: stage,
-  horaLabel: formatHora_(horaEntrada),
-  stageTs: stageTs || 0,
-  sortTs: sortTs || 0,
-  ageSec
-});
+  const rowId = row.id;
+  if (rowId == null) continue;
 
-        const stageAverages = {};
-        for(const s of KANBAN.STAGES){
-          stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
-        }
+  cards.push({
+    id: rowId,
+    name: safe_(row.nome, '(Sem nome)'),
+    phone: safe_(row.telefone, ''),
+    origem: orig,
+    responsavel: resp,
+    manychat: safe_(row['Manychat_id'], ''),
+    motivo: safe_(row['Motivo'], ''),
+    fluxo: stage,
+    horaLabel: formatHora_(horaEntrada),
+    stageTs: stageTs || 0,
+    sortTs: sortTs || 0,
+    ageSec
+  });
+} 
 
-        return {
-          stages: KANBAN.STAGES,
-          cards,
-          filters: {
-            responsaveis: Array.from(responsaveisSet).sort(),
-            origens: Array.from(origensSet).sort()
-          },
-          meta: {
-            updatedAt: new Date().toISOString(),
-            total: cards.length,
-            stageAverages,
-            sla: { warnMin: SETTINGS.slaWarnMin, dangerMin: SETTINGS.slaDangerMin }
-          }
-        };
-      }catch(err){
+const stageAverages = {};
+for(const s of KANBAN.STAGES){
+  stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
+}
+        catch(err){
         return { error: String(err.message || err) };
       }
     }
@@ -1976,8 +1962,6 @@ cards.push({
 }
 
 async function deleteLeadWithPassword_(leadId, password){
-async function deleteLeadWithPassword_(leadId, password){
-  // debug que te diz a verdade na hora
   console.log("DEBUG delete:", { table: KANBAN.TABLE, idCol: KANBAN.ID_COL, leadId });
 
   if(leadId == null) throw new Error("Lead sem ID (leadId undefined/null).");
@@ -1991,12 +1975,10 @@ async function deleteLeadWithPassword_(leadId, password){
   const { error: authErr } = await sb.auth.signInWithPassword({ email, password });
   if(authErr) throw new Error("Senha incorreta. Exclusão bloqueada.");
 
-const idCol = (KANBAN && KANBAN.ID_COL) ? KANBAN.ID_COL : "id";
-
-const { error: delErr } = await sb
-  .from(KANBAN.TABLE)
-  .delete()
-  .eq(KANBAN.ID_COL, leadId); // agora ID_COL existe
+  const { error: delErr } = await sb
+    .from(KANBAN.TABLE)
+    .delete()
+    .eq(KANBAN.ID_COL, leadId);
 
   if(delErr) throw delErr;
 
@@ -2481,6 +2463,7 @@ function askPasswordModal_(){
 </body>
 
 </html>
+
 
 
 
