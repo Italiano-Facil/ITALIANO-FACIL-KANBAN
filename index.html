@@ -1413,6 +1413,7 @@ async function reload(){
   if(res && res.error){
     showError(res.error);
     return;
+    await checkHandoffPopup();
   }
 
   // ✅ primeiro seta o STATE com os dados do kanban
@@ -1439,6 +1440,31 @@ async function reload(){
 
   startLiveTimers();
   showToast("Atualizado", "Dados sincronizados com sucesso", "success", 2200);
+}
+    async function loadHandoffsPendentes() {
+  if (!AUTH.atendenteId) return [];
+
+  const { data, error } = await sb
+    .from("lead_handoffs")
+    .select("*")
+    .eq("para_atendente_id", AUTH.atendenteId)
+    .eq("status", "pendente");
+
+  if (error) {
+    console.error("Erro ao buscar handoffs:", error);
+    return [];
+  }
+
+  return data || [];
+}
+    async function checkHandoffPopup() {
+  const pendentes = await loadHandoffsPendentes();
+
+  if (!pendentes.length) return;
+
+  const handoff = pendentes[0];
+
+  openHandoffModal(handoff);
 }
 
     function showError(msg){
@@ -2279,6 +2305,24 @@ document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
 
       overlay.classList.remove('hidden');
     }
+    async function acceptHandoff(id) {
+
+  const { error } = await sb
+    .from("lead_handoffs")
+    .update({
+      status: "aceito",
+      respondido_em: new Date().toISOString()
+    })
+    .eq("id", id);
+
+  if (error) {
+    showToast("Erro ao aceitar", error.message, "error");
+    return;
+  }
+
+  closeModal();
+  reload();
+}
 
     function closeModal(){
       const overlay = document.getElementById('modalOverlay');
@@ -2286,6 +2330,32 @@ document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
       MODAL.open = false;
       MODAL.card = null;
     }
+    function openHandoffModal(handoff) {
+  const overlay = document.getElementById("modalOverlay");
+  const modal = document.getElementById("modal");
+
+  overlay.classList.remove("hidden");
+
+  modal.innerHTML = `
+    <div class="modal-card">
+      <h2>Novo Lead do Pré-vendas</h2>
+      <p><strong>Nota:</strong></p>
+      <div style="margin:10px 0; padding:12px; background:#111; border-radius:10px;">
+        ${escapeHtml(handoff.nota)}
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button class="btn primary" onclick="acceptHandoff('${handoff.id}')">
+          Aceitar
+        </button>
+
+        <button class="btn danger" onclick="rejectHandoff('${handoff.id}')">
+          Recusar
+        </button>
+      </div>
+    </div>
+  `;
+}
 async function deleteFromModal(){
   if(!MODAL.card){
     showToast("Nenhum lead selecionado", "", "error");
@@ -2805,6 +2875,7 @@ async function saveModal(){
   </script>
 </body>
 </html>
+
 
 
 
