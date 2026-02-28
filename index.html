@@ -1099,7 +1099,7 @@
       console.error("JS Error:", { msg, url, line, col, err });
       try{
         showToast("Erro de Javascript", `${msg} (linha ${line})`, "error", 6000);
-      }catch(_){}
+      }catch(){}
       return false;
     };
   </script>
@@ -1388,7 +1388,7 @@ async function protectWithAuth(){
     }
 
     /*********************** DATA LAYER ********************************/
-   async function getKanbanData(){
+async function getKanbanData(){
   try{
     let allData = [];
     let page = 0;
@@ -1460,6 +1460,32 @@ async function protectWithAuth(){
         ageSec
       });
     }
+
+    const stageAverages = {};
+    for(const s of KANBAN.STAGES){
+      stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
+    }
+
+    // ✅ ESTE RETURN ESTAVA FALTANDO
+    return {
+      stages: KANBAN.STAGES,
+      cards,
+      filters: {
+        responsaveis: Array.from(responsaveisSet).sort(),
+        origens: Array.from(origensSet).sort()
+      },
+      meta: {
+        updatedAt: new Date().toISOString(),
+        total: cards.length,
+        stageAverages,
+        sla: { warnMin: SETTINGS.slaWarnMin, dangerMin: SETTINGS.slaDangerMin }
+      }
+    };
+
+  } catch(err){
+    return { error: String(err?.message || err) };
+  }
+}
 
     const stageAverages = {};
     for(const s of KANBAN.STAGES){
@@ -2485,6 +2511,7 @@ function askPasswordModal_(){
 </body>
 
 </html>
+
 
 
 
