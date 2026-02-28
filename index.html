@@ -1355,37 +1355,6 @@ async function protectWithAuth(){
 if (navUn) {
   navUn.classList.toggle("hidden", !AUTH.isAdmin);
 }
-}async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo, createdRole = null }){
-  if(!KANBAN.STAGES.includes(fluxo)) fluxo = "Inicial";
-
-  const now = new Date();
-
-  const payload = {
-    nome: nome,
-    telefone: telefone,
-    "fluxo-id": fluxo,
-    "responsavel-id": responsavel || "—",
-    "origem-id": origem || "—",
-    "Motivo": motivo || "",
-    "Data": now.toLocaleDateString("pt-BR"),
-    "Hora-entrada": now.toLocaleTimeString("pt-BR"),
-    "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
-    "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
-
-    // 🔥 autoria (opcional, mas recomendado)
-    created_by_auth: AUTH.session?.user?.id || null,
-    created_by_atendente_id: AUTH.atendenteId || null,
-    created_by_role: createdRole || null,
-  };
-
-  const { data, error } = await sb
-    .from(KANBAN.TABLE)
-    .insert(payload)
-    .select("id")
-    .single();
-
-  if(error) throw error;
-  return data; // { id }
 }
     async function renderPreVendas(){
   const wrap = document.getElementById("prevendasWrap");
@@ -1506,6 +1475,69 @@ const base = getPreVendasCards();
   }catch(err){
     showToast("Falha ao enviar", String(err.message || err), "error", 5200);
   }
+}
+
+    async function pvCreateLead(){
+  const nome = (document.getElementById("pvNome")?.value || "").trim();
+  const telefone = (document.getElementById("pvTelefone")?.value || "").trim();
+  const origem = (document.getElementById("pvOrigem")?.value || "").trim();
+  const fluxo = (document.getElementById("pvFluxo")?.value || "Inicial").trim();
+  const motivo = (document.getElementById("pvMotivo")?.value || "").trim();
+
+  if(!nome){
+    showToast("Nome obrigatório", "Digite o nome do lead", "warn");
+    return;
+  }
+
+  showToast("Cadastrando…", nome, "info", 1600);
+
+  try{
+    const created = await createLead({
+      nome,
+      telefone,
+      fluxo,
+      responsavel: AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas",
+      origem: origem || "—",
+      motivo,
+      createdRole: "prevendas"
+    });
+
+    // limpa campos
+    ["pvNome","pvTelefone","pvOrigem","pvMotivo"].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.value = "";
+    });
+
+    await reload();
+    setView("prevendas");
+
+    showToast("Lead criado ✅", `ID: ${created.id}`, "success", 2400);
+  }catch(err){
+    showToast("Falha ao criar", String(err.message || err), "error", 5200);
+  }
+}
+    function toggleView(){
+  const order = ["kanban","prevendas","dashboard","reports","settings"];
+  const idx = order.indexOf(VIEW);
+  const next = order[(idx + 1) % order.length];
+  setView(next);
+}
+    async function rejectHandoff(id){
+  const { error } = await sb
+    .from("lead_handoffs")
+    .update({
+      status: "recusado",
+      respondido_em: new Date().toISOString()
+    })
+    .eq("id", id);
+
+  if(error){
+    showToast("Erro ao recusar", error.message, "error");
+    return;
+  }
+
+  closeModal();
+  reload();
 }
     /*********************** VIEW **************************************/
 function setView(which){
@@ -1775,36 +1807,39 @@ async function reload(){
     }
 
     /*********************** DATA LAYER ********************************/
-            async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo }){
+
+async function createLead({ nome, telefone, fluxo, responsavel, origem, motivo, createdRole = null }){
   if(!KANBAN.STAGES.includes(fluxo)) fluxo = "Inicial";
 
   const now = new Date();
 
   const payload = {
-    nome: nome,
-    telefone: telefone,
-    'fluxo-id': fluxo,
-    'responsavel-id': responsavel || '—',
-    'origem-id': origem || '—',
-    'Motivo': motivo || '',
-    'Data': now.toLocaleDateString('pt-BR'),
-    'Hora-entrada': now.toLocaleTimeString('pt-BR'),
-    'Data da mudança do fluxo': now.toLocaleDateString('pt-BR'),
-    'Hora da mudança do fluxo': now.toLocaleTimeString('pt-BR'),
+    nome,
+    telefone,
+    "fluxo-id": fluxo,
+    "responsavel-id": responsavel || "—",
+    "origem-id": origem || "—",
+    "Motivo": motivo || "",
+    "Data": now.toLocaleDateString("pt-BR"),
+    "Hora-entrada": now.toLocaleTimeString("pt-BR"),
+    "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
+    "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
 
-    const payload = {
-  nome: nome,
-  telefone: telefone,
-  'fluxo-id': fluxo,
-  'responsavel-id': responsavel || '—',
-  'origem-id': origem || '—',
-  'Motivo': motivo || '',
-  created_by_auth: AUTH.session?.user?.id || null,
-  created_by_atendente_id: AUTH.atendenteId || null,
-  created_by_role: "prevendas",
-};
+    // autoria
+    created_by_auth: AUTH.session?.user?.id || null,
+    created_by_atendente_id: AUTH.atendenteId || null,
+    created_by_role: createdRole || null,
   };
 
+  const { data, error } = await sb
+    .from(KANBAN.TABLE)
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if(error) throw error;
+  return data; // { id }
+}
   const { data, error } = await sb
     .from(KANBAN.TABLE)
     .insert(payload)
@@ -2725,6 +2760,16 @@ async function saveModal(){
     responsavel: (fResp.value || '').trim() || '—',
     origem: (fOrig.value || '').trim() || '—',
     motivo: (fMotivo.value || '').trim()
+
+    const created = await createLead({
+  nome,
+  telefone,
+  fluxo,
+  responsavel: AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas",
+  origem: newFields.origem,
+  motivo: newFields.motivo,
+  createdRole: "prevendas"
+});
   };
 
   // ===== MODO CRIAR =====
@@ -3167,6 +3212,7 @@ const created = await createLead({
   </script>
 </body>
 </html>
+
 
 
 
