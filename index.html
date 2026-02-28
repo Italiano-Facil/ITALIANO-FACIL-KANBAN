@@ -1080,9 +1080,6 @@
           </a>
         </div>
         <div class="modal-right">
-          <button class="btn danger" type="button" onclick="requestDeleteLead()">
-  <i class="ph ph-trash"></i> Excluir
-</button>
           <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
           <button class="btn primary" type="button" onclick="saveModal()">
             <i class="ph ph-floppy-disk"></i> Salvar
@@ -1099,7 +1096,7 @@
       console.error("JS Error:", { msg, url, line, col, err });
       try{
         showToast("Erro de Javascript", `${msg} (linha ${line})`, "error", 6000);
-      }catch(){}
+      }catch(_){}
       return false;
     };
   </script>
@@ -1149,12 +1146,11 @@
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     /*********************** KANBAN CONFIG *****************************/
-const KANBAN = {
-  TABLE: "Leads-Geral1",
-  ID_COL: "id",
-  STAGES: ['Inicial', 'A02', 'A03', 'A04', 'Link-Enviado', 'Parabéns'],
-  SLA: { warnMin: 30, dangerMin: 60 }
-};
+    const KANBAN = {
+      TABLE: "Leads-Geral1", 
+      STAGES: ['Inicial', 'A02', 'A03', 'A04', 'Link-Enviado', 'Parabéns'],
+      SLA: { warnMin: 30, dangerMin: 60 }
+    };
 
     /*********************** CHART GLOBALS *****************************/
     Chart.defaults.color = '#9aa7b4';
@@ -1189,30 +1185,25 @@ const KANBAN = {
     });
 
     /*********************** AUTH **************************************/
-async function protectWithAuth(){
-  try{
-    const { data: { session } } = await sb.auth.getSession();
+    async function protectWithAuth(){
+      try{
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) {
+          window.location.href = "./login.html";
+          return;
+        }
+        const userInfo = document.getElementById("userInfo");
+        if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
 
-    if (!session) {
-      window.location.href = "./login.html";
-      return;
+        const btnLogout = document.getElementById("btnLogout");
+        if (btnLogout) btnLogout.addEventListener("click", async () => {
+          await sb.auth.signOut();
+          window.location.href = "./login.html";
+        });
+      }catch(err){
+        showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
+      }
     }
-
-    const userInfo = document.getElementById("userInfo");
-    if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
-
-    const btnLogout = document.getElementById("btnLogout");
-    if (btnLogout) {
-      btnLogout.addEventListener("click", async () => {
-        await sb.auth.signOut();
-        window.location.href = "./login.html";
-      });
-    }
-  } catch(err){
-    showToast("Falha ao validar sessão", String(err?.message || err), "error", 4500);
-    console.error("protectWithAuth error:", err);
-  }
-}
 
     /*********************** VIEW **************************************/
     function setView(which){
@@ -1388,133 +1379,96 @@ async function protectWithAuth(){
     }
 
     /*********************** DATA LAYER ********************************/
-async function getKanbanData(){
-  try{
-    let allData = [];
-    let page = 0;
-    const pageSize = 1000;
-    let fetchMore = true;
+    async function getKanbanData(){
+      try{
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let fetchMore = true;
 
-    while(fetchMore){
-      const { data, error } = await sb
-        .from(KANBAN.TABLE)
-        .select('*')
-        .range(page * pageSize, (page + 1) * pageSize - 1);
+        while(fetchMore){
+          const { data, error } = await sb
+            .from(KANBAN.TABLE)
+            .select('*')
+            .range(page * pageSize, (page + 1) * pageSize - 1);
 
-      if(error) throw error;
+          if(error) throw error;
 
-      if(data && data.length > 0){
-        allData = allData.concat(data);
-        if(data.length < pageSize) fetchMore = false;
-        else page++;
-      }else{
-        fetchMore = false;
-      }
-    }
+          if(data && data.length > 0){
+            allData = allData.concat(data);
+            if(data.length < pageSize) fetchMore = false;
+            else page++;
+          }else{
+            fetchMore = false;
+          }
+        }
 
-    const nowMs = Date.now();
-    const stats = {};
-    for(const s of KANBAN.STAGES) stats[s] = { count:0, sumSec:0 };
+        const nowMs = Date.now();
+        const stats = {};
+        for(const s of KANBAN.STAGES) stats[s] = { count:0, sumSec:0 };
 
-    const responsaveisSet = new Set();
-    const origensSet = new Set();
-    const cards = [];
+        const responsaveisSet = new Set();
+        const origensSet = new Set();
+        const cards = [];
 
-    for(const row of allData){
-      if(!row.nome || String(row.nome).trim() === '') continue;
+        for(const row of allData){
+          if(!row.nome || String(row.nome).trim() === '') continue;
 
-      const fluxoRaw = String(row['fluxo-id'] || '').trim();
-      const stage = KANBAN.STAGES.includes(fluxoRaw) ? fluxoRaw : 'Inicial';
+          const fluxoRaw = String(row['fluxo-id'] || '').trim();
+          const stage = KANBAN.STAGES.includes(fluxoRaw) ? fluxoRaw : 'Inicial';
 
-      const horaEntrada = row['Hora-entrada'] || row['Hora entrada'];
-      const entryTs  = buildTs(row['Data'], horaEntrada);
-      const changeTs = buildTs(row['Data da mudança do fluxo'], row['Hora da mudança do fluxo']);
+          const horaEntrada = row['Hora-entrada'] || row['Hora entrada'];
+          const entryTs  = buildTs(row['Data'], horaEntrada);
+          const changeTs = buildTs(row['Data da mudança do fluxo'], row['Hora da mudança do fluxo']);
 
-      const stageTs = (stage === 'Inicial') ? entryTs : (changeTs || entryTs);
-      const sortTs  = changeTs || entryTs;
-      const ageSec  = stageTs ? Math.max(0, Math.floor((nowMs - stageTs) / 1000)) : 0;
+          const stageTs = (stage === 'Inicial') ? entryTs : (changeTs || entryTs);
+          const sortTs  = changeTs || entryTs;
+          const ageSec  = stageTs ? Math.max(0, Math.floor((nowMs - stageTs) / 1000)) : 0;
 
-      stats[stage].count += 1;
-      stats[stage].sumSec += ageSec;
+          stats[stage].count += 1;
+          stats[stage].sumSec += ageSec;
 
-      const resp = safe_(row['responsavel-id'], '—');
-      const orig = safe_(row['origem-id'], '—');
-      if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
-      if(orig !== '—' && orig !== '') origensSet.add(orig);
+          const resp = safe_(row['responsavel-id'], '—');
+          const orig = safe_(row['origem-id'], '—');
+          if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
+          if(orig !== '—' && orig !== '') origensSet.add(orig);
 
-      const rowId = row.id;
-      if (rowId == null) continue;
+          cards.push({
+            id: row['id'],
+            name: safe_(row.nome, '(Sem nome)'),
+            phone: safe_(row.telefone, ''),
+            origem: orig,
+            responsavel: resp,
+            manychat: safe_(row['Manychat_id'], ''),
+            motivo: safe_(row['Motivo'], ''),
+            fluxo: stage,
+            horaLabel: formatHora_(horaEntrada),
+            stageTs: stageTs || 0,
+            sortTs: sortTs || 0,
+            ageSec
+          });
+        }
 
-      cards.push({
-        id: rowId,
-        name: safe_(row.nome, '(Sem nome)'),
-        phone: safe_(row.telefone, ''),
-        origem: orig,
-        responsavel: resp,
-        manychat: safe_(row['Manychat_id'], ''),
-        motivo: safe_(row['Motivo'], ''),
-        fluxo: stage,
-        horaLabel: formatHora_(horaEntrada),
-        stageTs: stageTs || 0,
-        sortTs: sortTs || 0,
-        ageSec
-      });
-    }
+        const stageAverages = {};
+        for(const s of KANBAN.STAGES){
+          stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
+        }
 
-    const stageAverages = {};
-    for(const s of KANBAN.STAGES){
-      stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
-    }
-
-    // ✅ ESTE RETURN ESTAVA FALTANDO
-    return {
-      stages: KANBAN.STAGES,
-      cards,
-      filters: {
-        responsaveis: Array.from(responsaveisSet).sort(),
-        origens: Array.from(origensSet).sort()
-      },
-      meta: {
-        updatedAt: new Date().toISOString(),
-        total: cards.length,
-        stageAverages,
-        sla: { warnMin: SETTINGS.slaWarnMin, dangerMin: SETTINGS.slaDangerMin }
-      }
-    };
-
-  } catch(err){
-    return { error: String(err?.message || err) };
-  }
-}
-
-    const stageAverages = {};
-    for(const s of KANBAN.STAGES){
-      stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
-    }
-
-    return {
-      stages: KANBAN.STAGES,
-      cards,
-      filters: {
-        responsaveis: Array.from(responsaveisSet).sort(),
-        origens: Array.from(origensSet).sort()
-      },
-      meta: {
-        updatedAt: new Date().toISOString(),
-        total: cards.length,
-        stageAverages,
-        sla: { warnMin: SETTINGS.slaWarnMin, dangerMin: SETTINGS.slaDangerMin }
-      }
-    };
-  }catch(err){
-    return { error: String(err?.message || err) };
-  }
-}
-const stageAverages = {};
-for(const s of KANBAN.STAGES){
-  stageAverages[s] = stats[s].count ? Math.round(stats[s].sumSec / stats[s].count) : 0;
-}
-        catch(err){
+        return {
+          stages: KANBAN.STAGES,
+          cards,
+          filters: {
+            responsaveis: Array.from(responsaveisSet).sort(),
+            origens: Array.from(origensSet).sort()
+          },
+          meta: {
+            updatedAt: new Date().toISOString(),
+            total: cards.length,
+            stageAverages,
+            sla: { warnMin: SETTINGS.slaWarnMin, dangerMin: SETTINGS.slaDangerMin }
+          }
+        };
+      }catch(err){
         return { error: String(err.message || err) };
       }
     }
@@ -1987,126 +1941,7 @@ for(const s of KANBAN.STAGES){
       MODAL.open = false;
       MODAL.card = null;
     }
- async function requestDeleteLead(){
-  if(!MODAL.card) return;
 
-  const card = MODAL.card;
-
-  const ok = confirm(`Excluir o lead "${card.name}"?\nEssa ação não pode ser desfeita.`);
-  if(!ok) return;
-
-  const password = await askPasswordModal_();
-  if(!password){
-    showToast("Exclusão cancelada", "Senha não informada", "info", 2400);
-    return;
-  }
-
-  try{
-    await deleteLeadWithPassword_(card.id, password);
-  }catch(err){
-    showToast("Não foi possível excluir", String(err?.message || err), "error", 5200);
-  }
-}
-
-async function deleteLeadWithPassword_(leadId, password){
-  console.log("DEBUG delete:", { table: KANBAN.TABLE, idCol: KANBAN.ID_COL, leadId });
-
-  if(leadId == null) throw new Error("Lead sem ID (leadId undefined/null).");
-
-  const { data: userRes, error: userErr } = await sb.auth.getUser();
-  if(userErr) throw userErr;
-
-  const email = userRes?.user?.email;
-  if(!email) throw new Error("Sessão sem email. Faça login novamente.");
-
-  const { error: authErr } = await sb.auth.signInWithPassword({ email, password });
-  if(authErr) throw new Error("Senha incorreta. Exclusão bloqueada.");
-
-  const idCol = (KANBAN && KANBAN.ID_COL) ? KANBAN.ID_COL : "id";
-
-  const { error: delErr } = await sb
-    .from(KANBAN.TABLE)
-    .delete()
-    .eq(idCol, leadId);
-
-  if(delErr) throw delErr;
-
-  STATE.cards = (STATE.cards || []).filter(c => String(c.id) !== String(leadId));
-
-  closeModal();
-  if(VIEW === "kanban") renderBoard();
-  if(VIEW === "dashboard") renderDashboard();
-  if(VIEW === "reports") renderReports();
-  updateMetrics();
-
-  showToast("Lead excluído", "Registro removido com sucesso", "success", 2400);
-}
-
-/** Modal simples para pedir senha (cria e remove DOM) */
-function askPasswordModal_(){
-  return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
-    overlay.style.zIndex = "5000";
-
-    overlay.innerHTML = `
-      <div class="modal" style="width:min(420px, 100%);">
-        <div class="modal-header">
-          <div>
-            <div class="modal-title">Confirmar exclusão</div>
-            <div class="modal-sub">Digite a senha da sua conta para excluir</div>
-          </div>
-          <button class="iconbtn" type="button" id="pwClose"><i class="ph ph-x"></i></button>
-        </div>
-        <div class="modal-body">
-          <div class="field">
-            <label>Senha</label>
-            <input id="pwInput" type="password" placeholder="••••••••" autocomplete="current-password" />
-          </div>
-          <div style="color:var(--muted); font-weight:800; font-size:12px; line-height:1.4;">
-            Dica: isso impede exclusões acidentais.
-          </div>
-        </div>
-        <div class="modal-footer">
-          <div></div>
-          <div class="modal-right">
-            <button class="btn ghost" type="button" id="pwCancel">Cancelar</button>
-            <button class="btn danger" type="button" id="pwOk">
-              <i class="ph ph-trash"></i> Confirmar exclusão
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-
-    function cleanup(val){
-      overlay.remove();
-      resolve(val);
-    }
-
-    overlay.addEventListener("click", (e) => {
-      if(e.target === overlay) cleanup("");
-    });
-
-    document.body.appendChild(overlay);
-
-    const input = overlay.querySelector("#pwInput");
-    const btnOk = overlay.querySelector("#pwOk");
-    const btnCancel = overlay.querySelector("#pwCancel");
-    const btnClose = overlay.querySelector("#pwClose");
-
-    btnCancel.onclick = () => cleanup("");
-    btnClose.onclick = () => cleanup("");
-    btnOk.onclick = () => cleanup((input.value || "").trim());
-
-    input.addEventListener("keydown", (e) => {
-      if(e.key === "Enter") btnOk.click();
-      if(e.key === "Escape") btnCancel.click();
-    });
-
-    setTimeout(() => input?.focus(), 50);
-  });
-}
     async function saveModal(){
       if(!MODAL.card) return;
 
@@ -2511,12 +2346,3 @@ function askPasswordModal_(){
 </body>
 
 </html>
-
-
-
-
-
-
-
-
-
