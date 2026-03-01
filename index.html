@@ -1493,12 +1493,15 @@ const base = getPreVendasCards();
   }
 }
 
-    async function pvCreateLead(){
+async function pvCreateLead(){
   const nome = (document.getElementById("pvNome")?.value || "").trim();
   const telefone = (document.getElementById("pvTelefone")?.value || "").trim();
   const origem = (document.getElementById("pvOrigem")?.value || "").trim();
   const fluxo = (document.getElementById("pvFluxo")?.value || "Inicial").trim();
   const motivo = (document.getElementById("pvMotivo")?.value || "").trim();
+
+  // (opcional) escolher pra qual atendente vai — hoje você não está usando isso no create
+  // const paraAtendenteId = document.getElementById("pvParaAtendente")?.value || "";
 
   if(!nome){
     showToast("Nome obrigatório", "Digite o nome do lead", "warn");
@@ -1507,31 +1510,35 @@ const base = getPreVendasCards();
 
   showToast("Cadastrando…", nome, "info", 1600);
 
+  try{
+    // aqui o responsavel vira "—" (não atribuído) ou pode ser o próprio pré-vendas
+    const responsavelNome = "—"; // ou: (AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "—")
 
+    const created = await createLead({
+      nome,
+      telefone,
+      fluxo,
+      responsavel: responsavelNome,
+      origem: origem || "—",
+      motivo,
+      createdRole: "prevendas"
+    });
 
     // limpa campos
-    ["pvNome","pvTelefone","pvOrigem","pvMotivo"].forEach(id=>{
+    ["pvNome","pvTelefone","pvMotivo"].forEach(id=>{
       const el = document.getElementById(id);
       if(el) el.value = "";
     });
 
+    // mantém selects como estão (origem/fluxo), se quiser limpar também, inclua ids acima
     await reload();
     setView("prevendas");
 
-    showToast("Lead criado ✅", `ID: ${created.id}`, "success", 2400);
+    showToast("Lead criado ✅", `ID: ${created?.id ?? "—"}`, "success", 2400);
   }catch(err){
-    showToast("Falha ao criar", String(err.message || err), "error", 5200);
+    showToast("Falha ao criar", String(err?.message || err), "error", 5200);
   }
-    await createLead({
-  nome,
-  telefone,
-  fluxo,
-  responsavel: responsavelNome,
-  origem: origem || "—",
-  motivo,
-  createdRole: "prevendas"
-});
-}
+}}
     function toggleView(){
   const order = ["kanban","prevendas","dashboard","reports","settings"];
   const idx = order.indexOf(VIEW);
@@ -1556,7 +1563,7 @@ const base = getPreVendasCards();
   reload();
 }
     /*********************** VIEW **************************************/
-function setView(which){
+async function setView(which){
   VIEW = which;
 
   const prevendas = document.getElementById('prevendas');
@@ -1583,29 +1590,13 @@ function setView(which){
     return;
   }
 
-    if(which === 'prevendas'){
+  if(which === 'prevendas'){
     prevendas?.classList.remove('hidden');
     document.getElementById('navPreVendas')?.classList.add('active');
+    try { await fillPvAtendentes(); } catch(e){ console.warn(e); }
     renderPreVendas();
     return;
   }
-      if(which === 'prevendas'){
-  prevendas?.classList.remove('hidden');
-  document.getElementById('navPreVendas')?.classList.add('active');
-  await fillPvAtendentes();
-  renderPreVendas();
-  return;
-
-        if(which === 'prevendas'){
-  prevendas?.classList.remove('hidden');
-  document.getElementById('navPreVendas')?.classList.add('active');
-  await fillPvAtendentes();
-  renderPreVendas();
-  return;
-}
-
-
-
 
   if(which === 'reports'){
     reports?.classList.remove('hidden');
@@ -1624,8 +1615,7 @@ function setView(which){
   if(which === 'unassigned'){
     if(!AUTH.isAdmin){
       showToast("Acesso negado", "Apenas admin", "error");
-      setView("kanban");
-      return;
+      return setView("kanban");
     }
     unassigned?.classList.remove('hidden');
     document.getElementById('navUnassigned')?.classList.add('active');
@@ -3263,6 +3253,7 @@ const created = await createLead({
   </script>
 </body>
 </html>
+
 
 
 
