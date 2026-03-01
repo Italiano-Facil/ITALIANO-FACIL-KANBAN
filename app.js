@@ -1,4 +1,5 @@
-   /*********************** GLOBAL ERROR CAPTURE **********************/
+
+    /*********************** GLOBAL ERROR CAPTURE **********************/
     // Mantém o design e evita "tela vermelha total" sem contexto.
     window.onerror = function(msg, url, line, col, err) {
       console.error("JS Error:", { msg, url, line, col, err });
@@ -7,9 +8,7 @@
       }catch(_){}
       return false;
     };
-  </script>
-
-  <script>
+ 
     /*********************** TOAST *************************************/
     function showToast(title, desc = "", type = "info", timeout = 3200){
       const wrap = document.getElementById("toastWrap");
@@ -111,11 +110,9 @@ async function protectWithAuth(){
 
     AUTH.session = session;
 
-    // mostra user no menu
     const userInfo = document.getElementById("userInfo");
     if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
 
-    // busca atendente ligado ao usuário
     const { data: atendente, error: e2 } = await sb
       .from("atendentes")
       .select("id, nome, manychat_name, ativo, is_admin, auth_user_id")
@@ -124,39 +121,29 @@ async function protectWithAuth(){
 
     if(e2) throw e2;
 
-    // ✅ se não achou atendente, não quebra o app
     AUTH.atendente = atendente || null;
     AUTH.atendenteId = atendente?.id || null;
     AUTH.isAdmin = Boolean(atendente?.is_admin);
 
-    // fallback (temporário) pra você não travar
-    // troque pelo seu email
     if (!AUTH.isAdmin && session.user.email === "vinicius@italianofacil.com") {
       AUTH.isAdmin = true;
     }
 
-    // logout
     const btnLogout = document.getElementById("btnLogout");
     if (btnLogout) btnLogout.addEventListener("click", async () => {
       await sb.auth.signOut();
       window.location.href = "./login.html";
     });
 
-    console.log("AUTH:", {
-      email: session.user.email,
-      user_id: session.user.id,
-      atendente,
-      isAdmin: AUTH.isAdmin
-    });
-
   }catch(err){
     console.error(err);
     showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
   }
-    const navUn = document.getElementById("navUnassigned");
-if (navUn) {
-  navUn.classList.toggle("hidden", !AUTH.isAdmin);
-}}
+
+  // ✅ fora do try/catch, mas dentro da função
+  const navUn = document.getElementById("navUnassigned");
+  if (navUn) navUn.classList.toggle("hidden", !AUTH.isAdmin);
+}
 
     async function renderPreVendas(){
   const wrap = document.getElementById("prevendasWrap");
@@ -2036,3 +2023,31 @@ const created = await createLead({
       XLSX.writeFile(wb, `italiano-facil-crm-leads-${new Date().toISOString().slice(0,10)}.xlsx`);
       showToast("Leads exportados", "Arquivo XLSX gerado", "success");
     }
+
+// ===== EXPOSE FUNCTIONS TO HTML (onclick / ondrop etc) =====
+window.sendToComercial = sendToComercial;
+window.pvCreateLead = pvCreateLead;
+
+window.onDrop = onDrop;
+window.onDragOver = onDragOver;
+window.onDragLeave = onDragLeave;
+
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.openCreateLead = openCreateLead;
+window.saveModal = saveModal;
+window.deleteFromModal = deleteFromModal;
+
+window.quickWin = quickWin;
+window.assignLead = assignLead;
+
+window.rejectHandoff = rejectHandoff;
+window.acceptHandoff = acceptHandoff;
+
+window.applySettings = applySettings;
+window.resetSettings = resetSettings;
+
+window.exportMetrics = exportMetrics;
+window.exportLeadsXlsx = exportLeadsXlsx;
+
+window.toggleView = toggleView;
