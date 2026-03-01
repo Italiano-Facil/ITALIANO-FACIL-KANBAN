@@ -771,13 +771,25 @@ created_by_role: row.created_by_role,
     return `<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`;
   }).join("");
 }
-    async function fillPvAtendentes(){
+async function fillPvAtendentes(){
   const sel = document.getElementById("pvParaAtendente");
   if(!sel) return;
 
-  const comercial = await loadAtendentesComercial(); // você já tem
-  sel.innerHTML = `<option value="">Selecionar atendente…</option>` +
-    comercial.map(a => `<option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>`).join("");
+  sel.innerHTML = `<option value="">Carregando...</option>`;
+
+  try{
+    const comercial = await loadAtendentesComercial();
+    console.log("ATENDENTES COMERCIAL:", comercial);
+
+    sel.innerHTML =
+      `<option value="">Selecionar atendente…</option>` +
+      comercial.map(a => `<option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>`).join("");
+
+  }catch(err){
+    console.error("fillPvAtendentes falhou:", err);
+    sel.innerHTML = `<option value="">Erro ao carregar atendentes</option>`;
+    showToast("Erro", "Não carregou atendentes do comercial", "error", 5000);
+  }
 }
     
 
