@@ -335,6 +335,63 @@ async function pvCreateLead(){
   closeModal();
   reload();
 }
+async function acceptHandoff(handoffId){
+  try{
+    // 1) pega o handoff
+    const { data: h, error: e1 } = await sb
+      .from("lead_handoffs")
+      .select("id, lead_id, para_atendente_id, status")
+      .eq("id", handoffId)
+      .single();
+    if(e1) throw e1;
+
+    if(!h?.lead_id || !h?.para_atendente_id){
+      throw new Error("Handoff inválido (sem lead_id/para_atendente_id).");
+    }
+
+    // 2) pega o nome do atendente que vai receber
+    const { data: at, error: e2 } = await sb
+      .from("atendentes")
+      .select("id, nome, manychat_name")
+      .eq("id", h.para_atendente_id)
+      .single();
+    if(e2) throw e2;
+
+    const atendenteNome = (at?.manychat_name || at?.nome || "—").trim();
+
+    // 3) atualiza o lead: atribui responsável
+    const now = new Date();
+    const leadPayload = {
+      "responsavel-id": atendenteNome,
+      responsavel_id: h.para_atendente_id, // se teu schema tiver esse campo
+      "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
+      "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
+      // opcional: já empurra pra etapa de comercial
+      // "fluxo-id": "A02",
+    };
+
+    const { error: e3 } = await sb
+      .from(KANBAN.TABLE)
+      .update(leadPayload)
+      .eq("id", h.lead_id);
+    if(e3) throw e3;
+
+    // 4) marca o handoff como aceito
+    const { error: e4 } = await sb
+      .from("lead_handoffs")
+      .update({ status: "aceito", respondido_em: new Date().toISOString() })
+      .eq("id", h.id);
+    if(e4) throw e4;
+
+    closeModal();
+    showToast("Aceito ✅", `Lead atribuído para ${atendenteNome}`, "success", 2600);
+    await reload();
+
+  }catch(err){
+    console.error("acceptHandoff falhou:", err);
+    showToast("Erro ao aceitar", String(err.message || err), "error", 5200);
+  }
+}
     /*********************** VIEW **************************************/
 async function setView(which){
   VIEW = which;
@@ -656,10 +713,16 @@ let q = sb
 
 if (!AUTH.isAdmin) {
   if (!AUTH.atendenteId) {
-    // não tem vínculo com atendente -> não carrega nada e mostra erro amigável
     return { error: "Seu usuário não está vinculado a um atendente (auth_user_id). Fale com o admin para vincular." };
   }
-q = q.eq("responsavel-id", AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "");
+
+  const myName = (AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "").trim();
+  const uid = AUTH.session?.user?.id;
+
+  const safeName = myName.replaceAll('"', '\\"'); // evita quebrar a string do .or()
+
+  // ✅ traz: (1) leads atribuídos a mim  OU  (2) leads que eu criei
+  q = q.or(`responsavel-id.eq."${safeName}",created_by_auth.eq.${uid}`);
 }
 
 const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
