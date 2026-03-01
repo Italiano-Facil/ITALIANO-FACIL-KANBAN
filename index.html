@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -953,7 +954,15 @@
     <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:12px;">
       <input id="pvNome" class="input" placeholder="Nome do lead" />
       <input id="pvTelefone" class="input" placeholder="Telefone/WhatsApp" />
-      <input id="pvOrigem" class="input" placeholder="Origem (ex: Insta, Indicação...)" />
+    <select id="pvOrigem" class="input">
+  <option value="META">META</option>
+  <option value="Google">Google</option>
+  <option value="Bio/Instagram">Bio/Instagram</option>
+  <option value="Não identificado">Não identificado</option>
+  <option value="Formulário Elementor">Formulário Elementor</option>
+  <option value="DM/Instagram">DM/Instagram</option>
+  <option value="Outros">Outros</option>
+</select>
     </div>
 
     <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
@@ -963,6 +972,9 @@
         <option value="A03">A03</option>
         <option value="A04">A04</option>
         <option value="Link-Enviado">Link-Enviado</option>
+      </select>
+      <selectt id="pvParaAtendente" class="input" style="width:auto;">
+        <option value="">Selecionar atendente...</option>
       </select>
 
       <input id="pvMotivo" class="input" style="min-width:320px; flex:1;"
@@ -1487,6 +1499,13 @@ const base = getPreVendasCards();
   const origem = (document.getElementById("pvOrigem")?.value || "").trim();
   const fluxo = (document.getElementById("pvFluxo")?.value || "Inicial").trim();
   const motivo = (document.getElementById("pvMotivo")?.value || "").trim();
+  if(which === 'prevendas'){
+  prevendas?.classList.remove('hidden');
+  document.getElementById('navPreVendas')?.classList.add('active');
+  await fillPvAtendentes();
+  renderPreVendas();
+  return;
+}
 
   if(!nome){
     showToast("Nome obrigatório", "Digite o nome do lead", "warn");
@@ -1495,16 +1514,15 @@ const base = getPreVendasCards();
 
   showToast("Cadastrando…", nome, "info", 1600);
 
-  try{
-    const created = await createLead({
-      nome,
-      telefone,
-      fluxo,
-      responsavel: AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas",
-      origem: origem || "—",
-      motivo,
-      createdRole: "prevendas"
-    });
+await createLead({
+  nome,
+  telefone,
+  fluxo,
+  responsavel: responsavelNome,
+  origem: origem || "—",
+  motivo,
+  createdRole: "prevendas"
+});
 
     // limpa campos
     ["pvNome","pvTelefone","pvOrigem","pvMotivo"].forEach(id=>{
@@ -1979,6 +1997,15 @@ created_by_role: row.created_by_role,
     return `<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`;
   }).join("");
 }
+    async function fillPvAtendentes(){
+  const sel = document.getElementById("pvParaAtendente");
+  if(!sel) return;
+
+  const comercial = await loadAtendentesComercial(); // você já tem
+  sel.innerHTML = `<option value="">Selecionar atendente…</option>` +
+    comercial.map(a => `<option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>`).join("");
+}
+    
 
     async function updateCardStage(id, newStage){
       if(!KANBAN.STAGES.includes(newStage)) throw new Error('Stage inválido.');
@@ -2155,6 +2182,13 @@ created_by_role: row.created_by_role,
     const respTxt = String(c.responsavel || '').trim();
     return (!respTxt || respTxt === '—' || respTxt.toLowerCase() === 'nao atribuido' || respTxt.toLowerCase() === 'não atribuído');
   });
+}
+    if(which === 'prevendas'){
+  prevendas?.classList.remove('hidden');
+  document.getElementById('navPreVendas')?.classList.add('active');
+  await fillPvAtendentes();
+  renderPreVendas();
+  return;
 }
 
 function renderUnassigned(){
@@ -3225,6 +3259,7 @@ await updateCardFields(card.id, newFields);
   </script>
 </body>
 </html>
+
 
 
 
