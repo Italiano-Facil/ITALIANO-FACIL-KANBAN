@@ -1367,11 +1367,11 @@ async function protectWithAuth(){
     console.error(err);
     showToast("Falha ao validar sessão", String(err.message || err), "error", 4500);
   }
-  const navUn = document.getElementById("navUnassigned");
+    const navUn = document.getElementById("navUnassigned");
 if (navUn) {
   navUn.classList.toggle("hidden", !AUTH.isAdmin);
-}
-}
+}}
+
     async function renderPreVendas(){
   const wrap = document.getElementById("prevendasWrap");
   const countEl = document.getElementById("pvCount");
@@ -1538,7 +1538,7 @@ async function pvCreateLead(){
   }catch(err){
     showToast("Falha ao criar", String(err?.message || err), "error", 5200);
   }
-}}
+}
     function toggleView(){
   const order = ["kanban","prevendas","dashboard","reports","settings"];
   const idx = order.indexOf(VIEW);
@@ -3253,6 +3253,7 @@ const created = await createLead({
   </script>
 </body>
 </html>
+
 
 
 
