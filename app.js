@@ -540,25 +540,17 @@ async function reload(){
       showToast("Erro de conexão", msg, "error", 5000);
     }
 
-    async function loadAtendentesComercial(){
+async function loadAtendentesComercial(){
   const { data, error } = await sb
     .from("atendentes")
-    .select("id, nome, ativo, departamento")
+    .select("id, nome, manychat_name, ativo")
     .eq("ativo", true)
     .order("nome", { ascending: true });
 
   if(error) throw error;
 
-  const all = data || [];
-
-  // se existir departamento, tenta filtrar Comercial
-  const hasDept = all.some(a => a.departamento !== undefined && a.departamento !== null);
-  const filtered = hasDept
-    ? all.filter(a => String(a.departamento || "").toLowerCase().includes("comercial"))
-    : all;
-
   // não mandar para si mesmo
-  return filtered.filter(a => String(a.id) !== String(AUTH.atendenteId));
+  return (data || []).filter(a => String(a.id) !== String(AUTH.atendenteId));
 }
 
     function updateMetrics(){
@@ -1458,24 +1450,7 @@ document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
 
       overlay.classList.remove('hidden');
     }
-    async function acceptHandoff(id) {
-
-  const { error } = await sb
-    .from("lead_handoffs")
-    .update({
-      status: "aceito",
-      respondido_em: new Date().toISOString()
-    })
-    .eq("id", id);
-
-  if (error) {
-    showToast("Erro ao aceitar", error.message, "error");
-    return;
-  }
-
-  closeModal();
-  reload();
-}
+acceptHandoff
 
     function closeModal(){
       const overlay = document.getElementById('modalOverlay');
