@@ -973,7 +973,7 @@
         <option value="A04">A04</option>
         <option value="Link-Enviado">Link-Enviado</option>
       </select>
-      <selectt id="pvParaAtendente" class="input" style="width:auto;">
+      <select id="pvParaAtendente" class="input" style="width:auto;">
         <option value="">Selecionar atendente...</option>
       </select>
 
@@ -1499,13 +1499,6 @@ const base = getPreVendasCards();
   const origem = (document.getElementById("pvOrigem")?.value || "").trim();
   const fluxo = (document.getElementById("pvFluxo")?.value || "Inicial").trim();
   const motivo = (document.getElementById("pvMotivo")?.value || "").trim();
-  if(which === 'prevendas'){
-  prevendas?.classList.remove('hidden');
-  document.getElementById('navPreVendas')?.classList.add('active');
-  await fillPvAtendentes();
-  renderPreVendas();
-  return;
-}
 
   if(!nome){
     showToast("Nome obrigatório", "Digite o nome do lead", "warn");
@@ -1514,15 +1507,7 @@ const base = getPreVendasCards();
 
   showToast("Cadastrando…", nome, "info", 1600);
 
-await createLead({
-  nome,
-  telefone,
-  fluxo,
-  responsavel: responsavelNome,
-  origem: origem || "—",
-  motivo,
-  createdRole: "prevendas"
-});
+
 
     // limpa campos
     ["pvNome","pvTelefone","pvOrigem","pvMotivo"].forEach(id=>{
@@ -1537,6 +1522,15 @@ await createLead({
   }catch(err){
     showToast("Falha ao criar", String(err.message || err), "error", 5200);
   }
+    await createLead({
+  nome,
+  telefone,
+  fluxo,
+  responsavel: responsavelNome,
+  origem: origem || "—",
+  motivo,
+  createdRole: "prevendas"
+});
 }
     function toggleView(){
   const order = ["kanban","prevendas","dashboard","reports","settings"];
@@ -1589,12 +1583,29 @@ function setView(which){
     return;
   }
 
-  if(which === 'prevendas'){
+    if(which === 'prevendas'){
     prevendas?.classList.remove('hidden');
     document.getElementById('navPreVendas')?.classList.add('active');
     renderPreVendas();
     return;
   }
+      if(which === 'prevendas'){
+  prevendas?.classList.remove('hidden');
+  document.getElementById('navPreVendas')?.classList.add('active');
+  await fillPvAtendentes();
+  renderPreVendas();
+  return;
+
+        if(which === 'prevendas'){
+  prevendas?.classList.remove('hidden');
+  document.getElementById('navPreVendas')?.classList.add('active');
+  await fillPvAtendentes();
+  renderPreVendas();
+  return;
+}
+
+
+
 
   if(which === 'reports'){
     reports?.classList.remove('hidden');
@@ -2183,13 +2194,7 @@ created_by_role: row.created_by_role,
     return (!respTxt || respTxt === '—' || respTxt.toLowerCase() === 'nao atribuido' || respTxt.toLowerCase() === 'não atribuído');
   });
 }
-    if(which === 'prevendas'){
-  prevendas?.classList.remove('hidden');
-  document.getElementById('navPreVendas')?.classList.add('active');
-  await fillPvAtendentes();
-  renderPreVendas();
-  return;
-}
+
 
 function renderUnassigned(){
   if(!AUTH.isAdmin) return;
@@ -2889,7 +2894,6 @@ const created = await createLead({
     await updateCardFields(card.id, newFields);
     await updateCardStage(card.id, fluxo);
     await updateLeadCore(card.id, { nome, telefone, fluxo });
-await updateCardFields(card.id, newFields);
 
     showToast("Atualizado", "Dados do lead salvos", "success", 2200);
     populateFilters();
@@ -3259,6 +3263,7 @@ await updateCardFields(card.id, newFields);
   </script>
 </body>
 </html>
+
 
 
 
