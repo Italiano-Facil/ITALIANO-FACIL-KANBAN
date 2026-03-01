@@ -2051,3 +2051,21 @@ window.exportMetrics = exportMetrics;
 window.exportLeadsXlsx = exportLeadsXlsx;
 
 window.toggleView = toggleView;
+window.setView = setView;
+window.toggleCompact = toggleCompact;
+window.openCreateLead = openCreateLead;
+window.reload = reload;
+window.toggleView = toggleView;
+
+window.pvCreateLead = pvCreateLead;
+
+window.exportLeadsXlsx = exportLeadsXlsx;
+
+window.closeModal = closeModal;
+window.saveModal = saveModal;
+window.deleteFromModal = deleteFromModal;
+
+window.assignLead = assignLead;
+window.sendToComercial = sendToComercial;
+window.acceptHandoff = acceptHandoff;
+window.rejectHandoff = rejectHandoff;
