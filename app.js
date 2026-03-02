@@ -46,6 +46,20 @@
       const map = { success:"success", error:"error", warn:"warn", info:"info" };
       showToast(msg, sub || "", map[type] || "info");
     }
+// Antes de criar o client:
+if (!window.supabase || !window.supabase.createClient) {
+  console.error("Supabase JS não carregou. window.supabase =", window.supabase);
+  // tenta avisar na tela mesmo sem toastWrap
+  document.body.innerHTML = `
+    <div style="padding:20px; font-family: Inter, sans-serif; color:#fff; background:#111; min-height:100vh">
+      <h2>Erro: Supabase não carregou</h2>
+      <p>Verifique se o script do supabase-js está sendo importado <b>antes</b> deste arquivo e com <code>defer</code>.</p>
+    </div>
+  `;
+  throw new Error("Supabase JS não carregou (window.supabase indefinido).");
+}
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     /*********************** SUPABASE CONFIG ***************************/
     const SUPABASE_URL = "https://jzeodgbaquiwgnbnjwkw.supabase.co";
