@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -6,26 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fácil CRM</title>
 
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <!-- Icons + Charts + Supabase + XLSX -->
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-
 </head>
 
 <body>
-  <!-- Toast container -->
   <div id="toastWrap" class="toast-wrap"></div>
 
   <div class="app">
-    <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
         <img
@@ -38,27 +32,29 @@
         </div>
       </div>
 
-
-      <div class="nav">
+<div class="nav">
         <button id="navKanban" class="active" type="button" onclick="setView('kanban')">
           <i class="ph ph-kanban"></i> Kanban
         </button>
-              <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
-  <i class="ph ph-user-plus"></i> Não atribuído
-</button>
+        
         <button id="navDash" type="button" onclick="setView('dashboard')">
           <i class="ph ph-chart-bar"></i> Dashboard
         </button>
-              <button id="navPreVendas" type="button" onclick="setView('prevendas')">
-  <i class="ph ph-paper-plane-tilt"></i> Pré-vendas
-</button>
-
-        <!-- Aba NOVA 1 -->
+        <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
+          <i class="ph ph-user-plus"></i> Não atribuído
+        </button>
+        <button id="navPreVendas" type="button" onclick="setView('prevendas')">
+          <i class="ph ph-paper-plane-tilt"></i> Pré-vendas
+        </button>
+        <button id="navRejected" type="button" onclick="setView('rejected')">
+          <i class="ph ph-x-circle"></i> Leads Recusados
+        </button>
+        <button id="navReceived" type="button" onclick="setView('received')">
+          <i class="ph ph-tray"></i> Caixa de Entrada
+        </button>
         <button id="navReports" type="button" onclick="setView('reports')">
           <i class="ph ph-file-text"></i> Relatórios
         </button>
-
-        <!-- Aba NOVA 2 -->
         <button id="navSettings" type="button" onclick="setView('settings')">
           <i class="ph ph-gear-six"></i> Configurações
         </button>
@@ -75,25 +71,32 @@
       </div>
     </aside>
 
-    <!-- Main -->
     <section class="main">
-      <header class="topbar">
-        <div class="top-left">
-          <div class="title">
-            Fácil CRM <span class="badge"></span>
+      <header class="topbar" style="display: flex; flex-direction: column; gap: 14px; padding: 18px 22px;">
+        
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div style="display: flex; align-items: baseline; gap: 12px;">
+            <div class="title" style="margin:0;">Fácil CRM <span class="badge"></span></div>
+            <div id="updatedAt" class="muted" style="margin:0;">Carregando...</div>
           </div>
-          <div id="updatedAt" class="muted">Carregando...</div>
+          
+          <button id="btnToggleHeader" class="iconbtn kanban-only" type="button" onclick="toggleTopbar()" title="Minimizar Cabeçalho">
+            <i id="toggleIcon" class="ph ph-caret-up"></i>
+          </button>
+        </div>
 
-          <div class="metrics">
-            <div class="metric">
+        <div id="kanbanTools" style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 14px;">
+          
+          <div class="metrics" style="margin: 0;">
+            <div class="metric" style="min-width: 120px; padding: 8px 12px;">
               <div class="label">Total</div>
               <div class="value"><span class="dot"></span> <span id="mTotal">—</span></div>
             </div>
-            <div class="metric">
+            <div class="metric" style="min-width: 120px; padding: 8px 12px;">
               <div class="label">SLA Crítico</div>
               <div class="value"><i class="ph ph-timer"></i> <span id="mSla">—</span></div>
             </div>
-            <div class="metric">
+            <div class="metric" style="min-width: 140px; padding: 8px 12px;">
               <div class="label">Auto-refresh</div>
               <div class="value">
                 <label class="switch">
@@ -104,120 +107,127 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="top-actions">
-          <!-- OPÇÃO NOVA 3: filtro por origem -->
-          <select id="filterOrigem" class="input" style="width:auto;">
-            <option value="">Todas Origens</option>
-          </select>
-
-          <select id="filterResponsavel" class="input" style="width:auto;">
-            <option value="">Todos Responsáveis</option>
-          </select>
-
-          <input id="search" class="input" placeholder="Buscar lead..." />
-
-          <button class="btn" type="button" onclick="toggleCompact()">
-            <i class="ph ph-text-aa"></i> Compacto
-          </button>
-          <button class="btn primary" type="button" onclick="openCreateLead()">
-  <i class="ph ph-plus"></i> Novo Lead
-</button>
-          <button class="btn primary" type="button" onclick="reload()">
-            <i class="ph ph-arrows-clockwise"></i> Atualizar
-          </button>
-
-          <button class="btn" type="button" onclick="toggleView()">
-            <i class="ph ph-sparkle"></i> Alternar Tela
-          </button>
+          <div class="top-actions" style="margin: 0;">
+            <select id="filterOrigem" class="input" style="width:140px;">
+              <option value="">Origens</option>
+            </select>
+            <select id="filterResponsavel" class="input" style="width:160px;">
+              <option value="">Responsáveis</option>
+            </select>
+            <input id="search" class="input" style="width:180px;" placeholder="Buscar lead..." />
+            
+            <button class="btn" type="button" onclick="toggleCompact()">
+              <i class="ph ph-text-aa"></i>
+            </button>
+            <button class="btn primary" type="button" onclick="openCreateLead()">
+              <i class="ph ph-plus"></i>
+            </button>
+            <button class="btn primary" type="button" onclick="reload()">
+              <i class="ph ph-arrows-clockwise"></i>
+            </button>
+          </div>
+          
         </div>
       </header>
 
-     <div class="content">
-  <!-- KANBAN -->
-  <main id="board" class="board">
-    <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
-      <i class="ph ph-hourglass-medium"></i> Carregando dados...
-    </div>
-  </main>
+      <div class="content">
+        <main id="board" class="board">
+          <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
+            <i class="ph ph-hourglass-medium"></i> Carregando dados...
+          </div>
+        </main>
 
-  <!-- PRÉ-VENDAS -->
-<main id="prevendas" class="page hidden">
-  <div class="chart-card" style="margin-bottom:14px;">
-    <div class="chart-title">
-      <div class="left"><i class="ph ph-user-plus"></i> Novo lead (Pré-vendas)</div>
-      <div class="pill">Total: <span id="pvCount">0</span></div>
-    </div>
+        <main id="received" class="page hidden">
+          <div class="chart-card" style="width:100%;">
+            <div class="chart-title">
+              <div class="left"><i class="ph ph-tray"></i> Leads Recebidos (Encaminhados para você)</div>
+              <button class="btn primary" type="button" onclick="renderReceived()">
+                <i class="ph ph-arrows-clockwise"></i> Atualizar
+              </button>
+            </div>
+            <div id="receivedWrap"></div>
+          </div>
+        </main>
 
-    <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:12px;">
-      <input id="pvNome" class="input" placeholder="Nome do lead" />
-      <input id="pvTelefone" class="input" placeholder="Telefone/WhatsApp" />
-    <select id="pvOrigem" class="input">
-  <option value="META">META</option>
-  <option value="Google">Google</option>
-  <option value="Bio/Instagram">Bio/Instagram</option>
-  <option value="Não identificado">Não identificado</option>
-  <option value="Formulário Elementor">Formulário Elementor</option>
-  <option value="DM/Instagram">DM/Instagram</option>
-  <option value="Outros">Outros</option>
-</select>
-    </div>
+        <main id="prevendas" class="page hidden">
+          <div class="chart-card" style="margin-bottom:14px;">
+            <div class="chart-title">
+              <div class="left"><i class="ph ph-user-plus"></i> Novo lead (Pré-vendas)</div>
+              <div class="pill">Total: <span id="pvCount">0</span></div>
+            </div>
+            <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:12px;">
+              <input id="pvNome" class="input" placeholder="Nome do lead" />
+              <input id="pvTelefone" class="input" placeholder="Telefone/WhatsApp" />
+              <select id="pvOrigem" class="input">
+                <option value="META">META</option>
+                <option value="Google">Google</option>
+                <option value="Bio/Instagram">Bio/Instagram</option>
+                <option value="Não identificado">Não identificado</option>
+                <option value="Formulário Elementor">Formulário Elementor</option>
+                <option value="DM/Instagram">DM/Instagram</option>
+                <option value="Outros">Outros</option>
+              </select>
+            </div>
+            <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+              <select id="pvFluxo" class="input" style="width:auto;">
+                <option value="Inicial">Inicial</option>
+                <option value="A02">A02</option>
+                <option value="A03">A03</option>
+                <option value="A04">A04</option>
+                <option value="Link-Enviado">Link-Enviado</option>
+              </select>
+              <select id="pvParaAtendente" class="input" style="width:auto;">
+                <option value="">Selecionar atendente...</option>
+              </select>
+              <input id="pvMotivo" class="input" style="min-width:320px; flex:1;" placeholder="Observação rápida (o que a pessoa quer?)" />
+              <button class="btn primary" type="button" onclick="pvCreateLead()">
+                <i class="ph ph-plus"></i> Cadastrar lead
+              </button>
+            </div>
+            <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+              <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar nos meus leads..." />
+              <select id="pvFilterStage" class="input" style="width:auto;">
+                <option value="">Todas etapas</option>
+                <option value="Inicial">Inicial</option>
+                <option value="A02">A02</option>
+                <option value="A03">A03</option>
+                <option value="A04">A04</option>
+                <option value="Link-Enviado">Link-Enviado</option>
+              </select>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">
+              <div class="left"><i class="ph ph-list-bullets"></i> Meus leads de pré-vendas</div>
+            </div>
+            <div id="prevendasWrap"></div>
+          </div>
+        </main>
 
-    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-      <select id="pvFluxo" class="input" style="width:auto;">
-        <option value="Inicial">Inicial</option>
-        <option value="A02">A02</option>
-        <option value="A03">A03</option>
-        <option value="A04">A04</option>
-        <option value="Link-Enviado">Link-Enviado</option>
-      </select>
-      <select id="pvParaAtendente" class="input" style="width:auto;">
-        <option value="">Selecionar atendente...</option>
-      </select>
+        <main id="rejected" class="page hidden">
+          <div class="chart-card" style="width:100%;">
+            <div class="chart-title">
+              <div class="left"><i class="ph ph-x-circle"></i> Leads recusados pelo Comercial</div>
+              <button class="btn primary" type="button" onclick="renderRejected()">
+                <i class="ph ph-arrows-clockwise"></i> Atualizar
+              </button>
+            </div>
+            <div id="rejectedWrap"></div>
+          </div>
+        </main>
 
-      <input id="pvMotivo" class="input" style="min-width:320px; flex:1;"
-             placeholder="Observação rápida (o que a pessoa quer?)" />
-
-      <button class="btn primary" type="button" onclick="pvCreateLead()">
-        <i class="ph ph-plus"></i> Cadastrar lead
-      </button>
-    </div>
-
-    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-      <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar nos meus leads..." />
-      <select id="pvFilterStage" class="input" style="width:auto;">
-        <option value="">Todas etapas</option>
-        <option value="Inicial">Inicial</option>
-        <option value="A02">A02</option>
-        <option value="A03">A03</option>
-        <option value="A04">A04</option>
-        <option value="Link-Enviado">Link-Enviado</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="chart-card">
-    <div class="chart-title">
-      <div class="left"><i class="ph ph-list-bullets"></i> Meus leads de pré-vendas</div>
-    </div>
-    <div id="prevendasWrap"></div>
-  </div>
-</main>
-
-  <!-- NÃO ATRIBUÍDO -->
-  <main id="unassigned" class="page hidden">
-    <div class="chart-card" style="width:100%;">
-      <div class="chart-title">
-        <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
-        <button class="btn primary" type="button" onclick="reload()">
-          <i class="ph ph-arrows-clockwise"></i> Atualizar lista
-        </button>
-      </div>
-      <div id="unassignedWrap"></div>
-    </div>
-  </main>
-
+        <main id="unassigned" class="page hidden">
+          <div class="chart-card" style="width:100%;">
+            <div class="chart-title">
+              <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
+              <button class="btn primary" type="button" onclick="reload()">
+                <i class="ph ph-arrows-clockwise"></i> Atualizar lista
+              </button>
+            </div>
+            <div id="unassignedWrap"></div>
+          </div>
+        </main>
 
         <main id="dashboard" class="dashboard hidden">
           <div class="chart-card">
@@ -264,7 +274,6 @@
           </div>
         </main>
 
-        <!-- Aba NOVA: Relatórios -->
         <main id="reports" class="reports hidden">
           <div class="chart-card">
             <div class="chart-title">
@@ -299,7 +308,6 @@
           </div>
         </main>
 
-        <!-- Aba NOVA: Configurações -->
         <main id="settings" class="settings hidden">
           <div class="chart-card">
             <div class="chart-title"><div class="left"><i class="ph ph-gear-six"></i> Preferências</div></div>
@@ -336,11 +344,11 @@
             </div>
           </div>
         </main>
+
       </div>
     </section>
   </div>
 
-  <!-- Modal -->
   <div id="modalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-header">
@@ -353,38 +361,47 @@
       
       <div class="modal-body">
         <div class="field">
-  <label>Nome</label>
-  <input id="fNome" type="text" />
-</div>
+          <label>Nome</label>
+          <input id="fNome" type="text" />
+        </div>
 
-<div class="field">
-  <label>Telefone</label>
-  <input id="fTelefone" type="text" placeholder="(51) 99999-9999" />
-</div>
+        <div class="field">
+          <label>Telefone</label>
+          <input id="fTelefone" type="text" placeholder="(51) 99999-9999" />
+        </div>
 
-<div class="field">
-  <label>Etapa (Fluxo)</label>
-  <select id="fFluxo" class="input" style="border-radius:14px;">
-    <option value="Inicial">Inicial</option>
-    <option value="A02">A02</option>
-    <option value="A03">A03</option>
-    <option value="A04">A04</option>
-    <option value="Link-Enviado">Link-Enviado</option>
-    <option value="Parabéns">Parabéns</option>
-  </select>
-</div>
-<select id="fResponsavel" class="input" style="border-radius:14px;">
-  <option value="">Selecionar atendente…</option>
-</select>
-       <select id="fOrigem" class="input" style="border-radius:14px;">
-  <option value="META">META</option>
-  <option value="Google">Google</option>
-  <option value="Bio/Instagram">Bio/Instagram</option>
-  <option value="Não identificado">Não identificado</option>
-  <option value="Formulário Elementor">Formulário Elementor</option>
-  <option value="DM/Instagram">DM/Instagram</option>
-  <option value="Outros">Outros</option>
-</select>
+        <div class="field">
+          <label>Etapa (Fluxo)</label>
+          <select id="fFluxo" class="input" style="border-radius:14px; width: 100%;">
+            <option value="Inicial">Inicial</option>
+            <option value="A02">A02</option>
+            <option value="A03">A03</option>
+            <option value="A04">A04</option>
+            <option value="Link-Enviado">Link-Enviado</option>
+            <option value="Parabéns">Parabéns</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Atendente (Responsável)</label>
+          <select id="fResponsavel" class="input" style="border-radius:14px; width: 100%;">
+            <option value="">Selecionar atendente…</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Origem</label>
+          <select id="fOrigem" class="input" style="border-radius:14px; width: 100%;">
+            <option value="META">META</option>
+            <option value="Google">Google</option>
+            <option value="Bio/Instagram">Bio/Instagram</option>
+            <option value="Não identificado">Não identificado</option>
+            <option value="Formulário Elementor">Formulário Elementor</option>
+            <option value="DM/Instagram">DM/Instagram</option>
+            <option value="Outros">Outros</option>
+          </select>
+        </div>
+
         <div class="field">
           <label>Observação (Motivo)</label>
           <textarea id="fMotivo" rows="4"></textarea>
@@ -399,9 +416,9 @@
         </div>
         <div class="modal-right">
           <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
-            <button class="btn danger" type="button" onclick="deleteFromModal()">
-    <i class="ph ph-trash"></i> Excluir
-  </button>
+          <button class="btn danger" type="button" onclick="deleteFromModal()">
+            <i class="ph ph-trash"></i> Excluir
+          </button>
           <button class="btn primary" type="button" onclick="saveModal()">
             <i class="ph ph-floppy-disk"></i> Salvar
           </button>
@@ -409,27 +426,37 @@
       </div>
     </div>
   </div>
-<script src="app.js"></script>
+
+  <div id="handoffModalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal" style="border: 2px solid var(--danger); z-index: 9999;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Novo Lead Recebido! 🎯</div>
+          <div class="modal-sub">O Pré-vendas acabou de te enviar um lead.</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Anotação / Contexto:</label>
+          <div id="hoNota" style="padding:14px; background:rgba(255,255,255,0.05); border-radius:8px; font-style:italic; font-size: 15px; color: #fff;"></div>
+          <input type="hidden" id="currentHandoffId" value="">
+        </div>
+      </div>
+      
+      <div class="modal-footer" style="position: relative; z-index: 10000;">
+        <div class="modal-left">
+          <button class="btn ghost" type="button" onclick="handleHandoffAction('postpone')">
+            <i class="ph ph-clock"></i> Ver mais tarde
+          </button>
+        </div>
+        <div class="modal-right">
+          <button class="btn danger" type="button" onclick="handleHandoffAction('reject')">Recusar Lead</button>
+          <button class="btn primary" type="button" onclick="handleHandoffAction('accept')">Aceitar Lead</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
