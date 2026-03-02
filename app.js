@@ -1096,81 +1096,60 @@ function renderUnassigned(){
     </table>
   `;
 }
-    async function assignLead(leadId){
+async function assignLead(leadId){
   if(!AUTH.isAdmin){
     showToast("Acesso negado", "Apenas admin", "error");
     return;
   }
 
-  const selAt = document.getElementById(`ua-at-${leadId}`);
-  const origemEl = document.getElementById(`ua-origem-${leadId}`);
-  const motivoEl = document.getElementById(`ua-motivo-${leadId}`);
-  const fluxoEl  = document.getElementById(`ua-fluxo-${leadId}`);
+  try{
+    const selAt = document.getElementById(`ua-at-${leadId}`);
+    const origemEl = document.getElementById(`ua-origem-${leadId}`);
+    const motivoEl = document.getElementById(`ua-motivo-${leadId}`);
+    const fluxoEl  = document.getElementById(`ua-fluxo-${leadId}`);
 
-  const atendenteId = selAt?.value;
-  const origem = (origemEl?.value || "—").trim() || "—";
-  const motivo = (motivoEl?.value || "").trim();
-  const fluxo = (fluxoEl?.value || "Inicial").trim();
+    const atendenteId = selAt?.value;
+    const origem = (origemEl?.value || "—").trim() || "—";
+    const motivo = (motivoEl?.value || "").trim();
+    const fluxo = (fluxoEl?.value || "Inicial").trim();
 
-  if(!atendenteId){
-    showToast("Falta atendente", "Selecione um atendente", "warn");
-    return;
-  }
-
-const atendente = (STATE.atendentes || []).find(a => String(a.id) === String(atendenteId));
-if(!atendente){
-  showToast("Erro", "Atendente não encontrado", "error");
-  return;
-}
-
-const atendenteNome = (atendente.manychat_name || atendente.nome || "—").trim();
-const atendenteAuthId = atendente.auth_user_id || null; // ✅ UUID
-
-const atendente = (STATE.atendentes || []).find(a => String(a.id) === String(atendenteId));
-const atendenteNome = atendente?.manychat_name || atendente?.nome || "—";
-
-const payload = {
-  responsavel_id: atendente?.auth_user_id || null,   // ✅ AQUI
-  "responsavel-id": atendenteNome,
-  "origem-id": origem,
-  "Motivo": motivo,
-  "fluxo-id": fluxo,
-  "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
-  "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
-};
-
-const { data, error } = await sb
-  .from(KANBAN.TABLE)
-  .update(payload)
-  .eq("id", leadId)
-  .select("id, responsavel-id, responsavel_id")   // 👈 ajuda a confirmar que gravou
-  .single();
-
-if(error) throw error;
-
-console.log("UPDATED:", data);
-
-    // Atualiza STATE localmente (sem reload total)
-    const card = (STATE.cards || []).find(c => String(c.id) === String(leadId));
-    if(card){
-      card.responsavel = atendenteNome;
-      card.origem = origem;
-      card.motivo = motivo;
-      card.fluxo = fluxo;
-      card.sortTs = Date.now();
-      card.stageTs = Date.now();
-      card.ageSec = 0;
+    if(!atendenteId){
+      showToast("Falta atendente", "Selecione um atendente", "warn");
+      return;
     }
 
-    populateFilters();
-    updateMetrics();
+    const atendente = (STATE.atendentes || []).find(a => String(a.id) === String(atendenteId));
+    if(!atendente){
+      showToast("Erro", "Atendente não encontrado", "error");
+      return;
+    }
 
-    // Re-renderiza a lista e o kanban
-    renderUnassigned();
-    if(VIEW === "kanban") renderBoard();
+    const atendenteNome = (atendente.manychat_name || atendente.nome || "—").trim();
+    const now = new Date();
 
-    showToast("Atribuído ✅", `${card?.name || "Lead"} → ${atendenteNome}`, "success", 2400);
+    const payload = {
+      responsavel_id: atendente.auth_user_id || null,
+      "responsavel-id": atendenteNome,
+      "origem-id": origem,
+      "Motivo": motivo,
+      "fluxo-id": fluxo,
+      "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
+      "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
+    };
+
+    const { error } = await sb
+      .from(KANBAN.TABLE)
+      .update(payload)
+      .eq("id", leadId);
+
+    if(error) throw error;
+
+    await reload();
+
+    showToast("Atribuído ✅", `Lead → ${atendenteNome}`, "success", 2400);
+
   }catch(err){
+    console.error("assignLead falhou:", err);
     showToast("Falha ao atribuir", String(err.message || err), "error", 5200);
   }
 }
