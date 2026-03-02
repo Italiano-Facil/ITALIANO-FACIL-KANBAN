@@ -403,71 +403,101 @@ async function acceptHandoff(handoffId){
   }
 }
     /*********************** VIEW **************************************/
-async function setView(which){
+// ==========================================
+// CONTROLE DO CABEÇALHO (MINIMIZAR)
+// ==========================================
+let TOPBAR_COLLAPSED = false;
+
+function toggleTopbar() {
+  TOPBAR_COLLAPSED = !TOPBAR_COLLAPSED;
+  const tools = document.getElementById('kanbanTools');
+  const icon = document.getElementById('toggleIcon');
+
+  if (TOPBAR_COLLAPSED) {
+    tools.style.display = 'none';
+    icon.className = 'ph ph-caret-down';
+  } else {
+    tools.style.display = 'flex';
+    icon.className = 'ph ph-caret-up';
+  }
+}
+
+// ==========================================
+// NAVEGAÇÃO DE TELAS (CORRIGIDA)
+// ==========================================
+async function setView(which) {
   VIEW = which;
 
-  const prevendas = document.getElementById('prevendas');
-  const board = document.getElementById('board');
-  const dash = document.getElementById('dashboard');
-  const reports = document.getElementById('reports');
-  const settings = document.getElementById('settings');
-  const unassigned = document.getElementById('unassigned');
+  const abas = ['board', 'prevendas', 'dashboard', 'reports', 'settings', 'unassigned', 'rejected', 'received'];
+  const botoes = ['navKanban', 'navPreVendas', 'navDash', 'navReports', 'navSettings', 'navUnassigned', 'navRejected', 'navReceived'];
 
-  ['navKanban','navDash','navReports','navSettings','navUnassigned','navPreVendas']
-    .forEach(id => document.getElementById(id)?.classList.remove('active'));
+  // Limpa visual de todos os botões do menu
+  botoes.forEach(id => document.getElementById(id)?.classList.remove('active'));
 
-  board?.classList.add('hidden');
-  dash?.classList.add('hidden');
-  reports?.classList.add('hidden');
-  settings?.classList.add('hidden');
-  unassigned?.classList.add('hidden');
-  prevendas?.classList.add('hidden');
+  // Esconde todas as abas de uma vez
+  abas.forEach(id => document.getElementById(id)?.classList.add('hidden'));
 
-  if(which === 'dashboard'){
-    dash?.classList.remove('hidden');
-    document.getElementById('navDash')?.classList.add('active');
-    renderDashboard();
-    return;
+  // Esconde ou exibe as métricas do topo (Aparece só no Kanban)
+  const btnToggle = document.getElementById('btnToggleHeader');
+  const kanbanTools = document.getElementById('kanbanTools');
+  
+  if (which === 'kanban') {
+    btnToggle?.classList.remove('hidden');
+    // Se o usuário não minimizou manualmente, exibe as ferramentas
+    if (!TOPBAR_COLLAPSED && kanbanTools) kanbanTools.style.display = 'flex';
+  } else {
+    btnToggle?.classList.add('hidden');
+    if (kanbanTools) kanbanTools.style.display = 'none';
   }
 
-  if(which === 'prevendas'){
-    prevendas?.classList.remove('hidden');
+  // Ativa a aba solicitada e carrega os dados dela
+  if (which === 'dashboard') {
+    document.getElementById('dashboard')?.classList.remove('hidden');
+    document.getElementById('navDash')?.classList.add('active');
+    renderDashboard();
+  } 
+  else if (which === 'rejected') {
+    document.getElementById('rejected')?.classList.remove('hidden');
+    document.getElementById('navRejected')?.classList.add('active');
+    renderRejected();
+  } 
+  else if (which === 'received') {
+    document.getElementById('received')?.classList.remove('hidden');
+    document.getElementById('navReceived')?.classList.add('active');
+    renderReceived();
+  } 
+  else if (which === 'prevendas') {
+    document.getElementById('prevendas')?.classList.remove('hidden');
     document.getElementById('navPreVendas')?.classList.add('active');
     try { await fillPvAtendentes(); } catch(e){ console.warn(e); }
     await renderPreVendas();
-    return;
-  }
-
-  if(which === 'reports'){
-    reports?.classList.remove('hidden');
+  } 
+  else if (which === 'reports') {
+    document.getElementById('reports')?.classList.remove('hidden');
     document.getElementById('navReports')?.classList.add('active');
     renderReports();
-    return;
-  }
-
-  if(which === 'settings'){
-    settings?.classList.remove('hidden');
+  } 
+  else if (which === 'settings') {
+    document.getElementById('settings')?.classList.remove('hidden');
     document.getElementById('navSettings')?.classList.add('active');
     syncSettingsUI();
-    return;
-  }
-
-  if(which === 'unassigned'){
+  } 
+  else if (which === 'unassigned') {
     if(!AUTH.isAdmin){
       showToast("Acesso negado", "Apenas admin", "error");
       return setView("kanban");
     }
-    unassigned?.classList.remove('hidden');
+    document.getElementById('unassigned')?.classList.remove('hidden');
     document.getElementById('navUnassigned')?.classList.add('active');
     renderUnassigned();
-    return;
+  } 
+  else {
+    // PADRÃO: Kanban
+    document.getElementById('board')?.classList.remove('hidden');
+    document.getElementById('navKanban')?.classList.add('active');
+    renderBoard();
   }
-
-  // default: kanban
-  board?.classList.remove('hidden');
-  document.getElementById('navKanban')?.classList.add('active');
-  renderBoard();
-}
+}   
     /*********************** LISTENERS *********************************/
     function setupListeners(){
       document.getElementById('search')?.addEventListener('input', (e) => {
@@ -584,14 +614,93 @@ async function reload(){
 
   return data || [];
 }
-    async function checkHandoffPopup() {
-  const pendentes = await loadHandoffsPendentes();
+async function checkHandoffPopup() {
+  if (!AUTH.atendenteId) return;
 
-  if (!pendentes.length) return;
+  const { data, error } = await sb
+    .from("lead_handoffs")
+    .select("*")
+    .eq("para_atendente_id", AUTH.atendenteId)
+    .eq("status", "pendente"); // O segredo está aqui!
 
-  const handoff = pendentes[0];
+  if (error) {
+    console.error("Erro ao buscar handoffs:", error);
+    return;
+  }
 
-  openHandoffModal(handoff);
+  // Só abre se tiver algum pendente
+  if (data && data.length > 0) {
+    openHandoffModal(data[0]);
+  }
+}
+
+// RenderReceived deve ficar FORA, como uma função independente
+async function renderReceived() {
+  const wrap = document.getElementById("receivedWrap");
+  if(!wrap) return;
+
+  wrap.innerHTML = '<div style="padding:20px; color:var(--muted);"><i class="ph ph-spinner animate-spin"></i> Buscando leads recebidos...</div>';
+
+  try {
+    const { data: handoffs, error } = await sb.from("lead_handoffs")
+      .select(`id, nota, status, lead_id, de_atendente_id, created_at`)
+      .eq("para_atendente_id", AUTH.atendenteId)
+      .in("status", ["pendente", "adiado"])
+      .order("created_at", { ascending: false });
+
+    if(error) throw error;
+
+    if(!handoffs || handoffs.length === 0){
+       wrap.innerHTML = `<div style="color:var(--muted); font-weight:900; padding: 20px;">Nenhum lead aguardando sua resposta! 🥳</div>`;
+       return;
+    }
+
+    const { data: atendentes } = await sb.from("atendentes").select("id, nome, manychat_name");
+    const listaAtendentes = atendentes || [];
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>ID do Lead</th>
+            <th>Enviado por</th>
+            <th>Anotação (Contexto)</th>
+            <th>Status</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for(const h of handoffs) {
+       const remetente = listaAtendentes.find(a => String(a.id) === String(h.de_atendente_id));
+       const nomeRemetente = remetente ? (remetente.manychat_name || remetente.nome) : "Pré-vendas";
+       
+       const statusBadge = h.status === 'pendente' 
+          ? `<span class="tag warn">Novo</span>` 
+          : `<span class="tag ghost"><i class="ph ph-clock"></i> Adiado</span>`;
+
+       html += `
+         <tr>
+           <td><b>${escapeHtml(h.lead_id)}</b></td>
+           <td><i class="ph ph-paper-plane-tilt"></i> ${escapeHtml(nomeRemetente)}</td>
+           <td style="max-width:250px; white-space:normal;">"${escapeHtml(h.nota || '')}"</td>
+           <td>${statusBadge}</td>
+           <td>
+             <div style="display:flex; gap:8px;">
+               <button class="btn primary" onclick="acceptHandoff('${h.id}')"><i class="ph ph-check"></i> Aceitar</button>
+               <button class="btn danger" onclick="rejectHandoff('${h.id}')"><i class="ph ph-x"></i> Recusar</button>
+             </div>
+           </td>
+         </tr>
+       `;
+    }
+    html += `</tbody></table>`;
+    wrap.innerHTML = html;
+
+  } catch (err) {
+    wrap.innerHTML = `<div style="color:#fecaca;">Erro ao carregar: ${err.message}</div>`;
+  }
 }
 
     function showError(msg){
@@ -1524,41 +1633,200 @@ fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
       MODAL.open = false;
       MODAL.card = null;
     }
-function openHandoffModal(handoff) {
-  const overlay = document.getElementById("modalOverlay");
-  const modal = overlay?.querySelector(".modal"); // ✅ pega pelo class
+// ==========================================
+// FLUXO DE ENCAMINHAMENTO (HANDOFF)
+// ==========================================
 
-  if(!overlay || !modal){
-    showToast("Erro", "Modal não encontrado no HTML", "error");
+function openHandoffModal(handoff) {
+  const overlay = document.getElementById("handoffModalOverlay");
+  const notaEl = document.getElementById("hoNota");
+  const hiddenId = document.getElementById("currentHandoffId");
+
+  if(!overlay) return;
+
+  notaEl.textContent = handoff.nota || "Sem anotações.";
+  hiddenId.value = handoff.id; // Guarda o ID para os botões usarem
+
+  overlay.classList.remove("hidden");
+}
+
+// NOVA FUNÇÃO CONTROLADORA: Ela pega o ID e chama a função certa
+function handleHandoffAction(actionType) {
+  const handoffId = document.getElementById("currentHandoffId").value;
+  if (!handoffId) return;
+
+  if (actionType === 'accept') {
+    acceptHandoff(handoffId);
+  } else if (actionType === 'reject') {
+    rejectHandoff(handoffId);
+  } else if (actionType === 'postpone') {
+    postponeHandoff(handoffId);
+  }
+}
+
+// NOVO: Função para o "Ver mais tarde"
+async function postponeHandoff(id) {
+  showToast("Adiado", "O lead ficará na sua Caixa de Entrada", "info", 2000);
+  
+  try {
+    const { error } = await sb.from("lead_handoffs").update({ status: "adiado" }).eq("id", id);
+    if(error) throw error;
+    
+    closeHandoffModal();
+    reload(); // Atualiza a tela para refletir na Caixa de Entrada
+  } catch(err) {
+    showToast("Erro ao adiar", err.message, "error");
+  }
+}
+
+function closeHandoffModal() {
+  const overlay = document.getElementById("handoffModalOverlay");
+  if(overlay) overlay.classList.add("hidden");
+}
+
+async function rejectHandoff(id){
+  showToast("Recusando...", "Avisando o pré-vendas", "info", 1500);
+  const { error } = await sb
+    .from("lead_handoffs")
+    .update({
+      status: "recusado",
+      respondido_em: new Date().toISOString()
+    })
+    .eq("id", id);
+
+  if(error){
+    showToast("Erro ao recusar", error.message, "error");
     return;
   }
 
-  overlay.classList.remove("hidden");
+  closeHandoffModal();
+  showToast("Recusado", "O lead voltou para o pré-vendas", "warn");
+  reload();
+}
 
-  modal.innerHTML = `
-    <div class="modal-header">
-      <div>
-        <div class="modal-title">Novo Lead do Pré-vendas</div>
-        <div class="modal-sub">Encaminhamento pendente</div>
-      </div>
-      <button class="iconbtn" type="button" onclick="closeModal()"><i class="ph ph-x"></i></button>
-    </div>
+async function acceptHandoff(handoffId){
+  try{
+    const { data: h, error: e1 } = await sb
+      .from("lead_handoffs")
+      .select("id, lead_id, para_atendente_id, status")
+      .eq("id", handoffId)
+      .single();
+    if(e1) throw e1;
 
-    <div class="modal-body">
-      <div class="field">
-        <label>Nota</label>
-        <textarea rows="5" readonly>${escapeHtml(handoff.nota || "")}</textarea>
-      </div>
-    </div>
+    const { data: at, error: e2 } = await sb
+      .from("atendentes")
+      .select("id, nome, manychat_name") 
+      .eq("id", h.para_atendente_id)
+      .single();
+    if(e2) throw e2;
 
-    <div class="modal-footer">
-      <div></div>
-      <div class="modal-right">
-        <button class="btn danger" onclick="rejectHandoff('${handoff.id}')">Recusar</button>
-        <button class="btn primary" onclick="acceptHandoff('${handoff.id}')">Aceitar</button>
-      </div>
-    </div>
-  `;
+    const atendenteNome = (at?.manychat_name || at?.nome || "—").trim();
+    const now = new Date();
+    
+    const leadPayload = {
+      responsavel_id: at.id, 
+      "responsavel-id": atendenteNome,
+      "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
+      "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
+    };
+
+    const { error: e3 } = await sb.from(KANBAN.TABLE).update(leadPayload).eq("id", h.lead_id);
+    if(e3) throw e3;
+
+    const { error: e4 } = await sb.from("lead_handoffs").update({ status: "aceito", respondido_em: new Date().toISOString() }).eq("id", h.id);
+    if(e4) throw e4;
+
+    closeHandoffModal();
+    showToast("Aceito ✅", `O lead agora é seu, ${atendenteNome}!`, "success", 3000);
+    await reload();
+
+  }catch(err){
+    console.error("acceptHandoff falhou:", err);
+    showToast("Erro ao aceitar", String(err.message || err), "error", 5200);
+  }
+}
+
+// ==========================================
+// NOVA ABA: LEADS RECUSADOS
+// ==========================================
+
+async function renderRejected() {
+  const wrap = document.getElementById("rejectedWrap");
+  if(!wrap) return;
+
+  wrap.innerHTML = '<div style="padding:20px; color:var(--muted);"><i class="ph ph-spinner animate-spin"></i> Buscando recusas...</div>';
+
+  try {
+    let q = sb.from("lead_handoffs")
+      .select(`id, nota, respondido_em, status, lead_id, de_atendente_id, para_atendente_id`)
+      .eq("status", "recusado")
+      .order("respondido_em", { ascending: false });
+
+    // Se não for admin, vê só os que ele mesmo enviou e foram recusados
+    if (!AUTH.isAdmin) {
+      q = q.eq("de_atendente_id", AUTH.atendenteId);
+    }
+
+    const { data: handoffs, error } = await q;
+    if(error) throw error;
+
+    if(!handoffs || handoffs.length === 0){
+       wrap.innerHTML = `<div style="color:var(--muted); font-weight:900; padding: 20px;">Nenhum lead recusado pendente. Que maravilha! 🎉</div>`;
+       return;
+    }
+
+    // Pega o nome dos atendentes para mostrar quem recusou
+    const atendentes = STATE.atendentes || [];
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>ID do Lead</th>
+            <th>Vendedor que recusou</th>
+            <th>Sua anotação original</th>
+            <th>Data da Recusa</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for(const h of handoffs) {
+       const recusador = atendentes.find(a => String(a.id) === String(h.para_atendente_id));
+       const nomeRecusador = recusador ? (recusador.manychat_name || recusador.nome) : "Vendedor Desconhecido";
+       const dataRecusa = h.respondido_em ? new Date(h.respondido_em).toLocaleString('pt-BR') : "—";
+
+       html += `
+         <tr>
+           <td><b>${escapeHtml(h.lead_id)}</b></td>
+           <td><span class="tag danger"><i class="ph ph-user-minus"></i> ${escapeHtml(nomeRecusador)}</span></td>
+           <td style="max-width:250px; white-space:normal;">"${escapeHtml(h.nota || '')}"</td>
+           <td>${dataRecusa}</td>
+           <td>
+             <button class="btn" onclick="openModal('${h.lead_id}')"><i class="ph ph-pencil"></i> Ver Lead</button>
+             <button class="btn ghost" onclick="dismissRejection('${h.id}')"><i class="ph ph-check"></i> Ciente (Arquivar)</button>
+           </td>
+         </tr>
+       `;
+    }
+    html += `</tbody></table>`;
+    wrap.innerHTML = html;
+
+  } catch (err) {
+    wrap.innerHTML = `<div style="color:#fecaca;">Erro ao carregar: ${err.message}</div>`;
+  }
+}
+
+async function dismissRejection(handoffId) {
+  try {
+    const { error } = await sb.from("lead_handoffs").update({ status: 'recusado_ciente' }).eq('id', handoffId);
+    if(error) throw error;
+    showToast("Arquivado", "Recusa removida da lista", "success");
+    renderRejected(); // Recarrega a tabela na hora
+  } catch(err) {
+    showToast("Erro ao arquivar", err.message, "error");
+  }
 }
 async function deleteFromModal(){
   if(!MODAL.card){
@@ -2122,3 +2390,8 @@ window.assignLead = assignLead;
 window.sendToComercial = sendToComercial;
 window.acceptHandoff = acceptHandoff;
 window.rejectHandoff = rejectHandoff;
+window.dismissRejection = dismissRejection;
+window.renderRejected = renderRejected;
+window.renderReceived = renderReceived;
+window.postponeHandoff = postponeHandoff;
+window.toggleTopbar = toggleTopbar;
