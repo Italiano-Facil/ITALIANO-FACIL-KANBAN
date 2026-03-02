@@ -59,7 +59,7 @@ if (!window.supabase || !window.supabase.createClient) {
   throw new Error("Supabase JS não carregou (window.supabase indefinido).");
 }
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
     /*********************** SUPABASE CONFIG ***************************/
     const SUPABASE_URL = "https://jzeodgbaquiwgnbnjwkw.supabase.co";
@@ -362,21 +362,21 @@ async function acceptHandoff(handoffId){
       throw new Error("Handoff inválido (sem lead_id/para_atendente_id).");
     }
 
-    // pega atendente que vai receber (NO COMERCIAL)
     const { data: at, error: e2 } = await sb
       .from("atendentes")
-      .select("id, nome, manychat_name")  // id aqui é o atendentes.id
+      .select("id, nome, manychat_name, auth_user_id") // ✅ Adicionado auth_user_id
       .eq("id", h.para_atendente_id)
       .single();
     if(e2) throw e2;
 
     const atendenteNome = (at?.manychat_name || at?.nome || "—").trim();
-
     const now = new Date();
+    
     const leadPayload = {
-      responsavel_id: at.id,                 // ✅ atendentes.id
-      "responsavel-id": atendenteNome,       // ✅ texto
-      responsavel_nome: atendenteNome,       // ✅ se existir
+      // ✅ UUID do banco + Texto do Kanban
+      responsavel_id: at.auth_user_id || at.id, 
+      "responsavel-id": atendenteNome,
+      
       "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
       "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
     };
@@ -434,7 +434,7 @@ async function setView(which){
     prevendas?.classList.remove('hidden');
     document.getElementById('navPreVendas')?.classList.add('active');
     try { await fillPvAtendentes(); } catch(e){ console.warn(e); }
-    renderPreVendas();
+    await renderPreVendas();
     return;
   }
 
@@ -1113,10 +1113,6 @@ async function assignLead(leadId){
     const fluxoEl  = document.getElementById(`ua-fluxo-${leadId}`);
 
     const atendenteId = selAt?.value;
-    const origem = (origemEl?.value || "—").trim() || "—";
-    const motivo = (motivoEl?.value || "").trim();
-    const fluxo = (fluxoEl?.value || "Inicial").trim();
-
     if(!atendenteId){
       showToast("Falta atendente", "Selecione um atendente", "warn");
       return;
@@ -1132,31 +1128,32 @@ async function assignLead(leadId){
     const now = new Date();
 
     const payload = {
-      responsavel_id: atendente.id,               // FK atendentes.id
-      "responsavel-id": atendenteNome,            // texto
-      responsavel_nome: atendenteNome,            // se existir
-      "origem-id": origem,
-      "Motivo": motivo,
-      "fluxo-id": fluxo,
+      responsavel_id: atendente.id, 
+      "responsavel-id": atendenteNome, 
+      "origem-id": (origemEl?.value || "—").trim() || "—",
+      "Motivo": (motivoEl?.value || "").trim(),
+      "fluxo-id": (fluxoEl?.value || "Inicial").trim(),
       "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
       "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
     };
 
-    const { error: upErr } = await sb
+    console.log("Enviando para o Supabase ID:", leadId, payload);
+
+    // Adicionamos o .select() aqui. Ele força o retorno da linha se ela realmente foi editada.
+    const { data, error: upErr } = await sb
       .from(KANBAN.TABLE)
       .update(payload)
-      .eq("id", leadId);
+      .eq("id", leadId)
+      .select(); 
 
     if (upErr) throw upErr;
 
-    // debug (opcional)
-    const { data: row, error: selErr } = await sb
-      .from(KANBAN.TABLE)
-      .select('id, Manychat_id, "responsavel-id", responsavel_id, responsavel_nome')
-      .eq("id", leadId)
-      .single();
-
-    console.log("assignLead RESULT:", { leadId, payload, row, selErr });
+    // Se o Supabase responder com um array vazio, o RLS bloqueou a edição!
+    if (!data || data.length === 0) {
+      console.warn("FALHA SILENCIOSA: Nenhuma linha foi alterada. Provavelmente o RLS bloqueou.");
+      showToast("Falha Silenciosa", "Permissão negada no Supabase (RLS Ativo).", "error", 6000);
+      return; // Para a execução
+    }
 
     await reload();
     showToast("Atribuído ✅", `Lead → ${atendenteNome}`, "success", 2400);
@@ -1505,8 +1502,8 @@ async function openModal(id) {
   fFluxo.value = card.fluxo || 'Inicial';
 
   // ✅ carrega lista e só depois seta o valor
-  await fillAtendentesSelect();
-  fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
+await fillAtendentesSelect();
+fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
 
   fOrig.value = card.origem !== '—' ? (card.origem || '') : '';
   fMotivo.value = card.motivo || '';
