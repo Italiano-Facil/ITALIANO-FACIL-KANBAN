@@ -343,40 +343,38 @@ async function acceptHandoff(handoffId){
       .select("id, lead_id, para_atendente_id, status")
       .eq("id", handoffId)
       .single();
-      const { data: at, error: e2 } = await sb
-  .from("atendentes")
-  .select("id, nome, manychat_name, auth_user_id") // ✅ AQUI
-  .eq("id", h.para_atendente_id)
-  .single();
+
     if(e1) throw e1;
 
     if(!h?.lead_id || !h?.para_atendente_id){
       throw new Error("Handoff inválido (sem lead_id/para_atendente_id).");
     }
 
-    // 2) pega o nome do atendente que vai receber
+    // 2) pega o atendente que vai receber
     const { data: at, error: e2 } = await sb
       .from("atendentes")
-      .select("id, nome, manychat_name")
+      .select("id, nome, manychat_name, auth_user_id")
       .eq("id", h.para_atendente_id)
       .single();
+
     if(e2) throw e2;
 
     const atendenteNome = (at?.manychat_name || at?.nome || "—").trim();
 
     // 3) atualiza o lead: atribui responsável
     const now = new Date();
-   const leadPayload = {
-  "responsavel-id": atendenteNome,
-  responsavel_id: at?.auth_user_id || null,  // ✅ AQUI
-  "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
-  "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
-};
+    const leadPayload = {
+      "responsavel-id": atendenteNome,
+      responsavel_id: at?.auth_user_id || null,
+      "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
+      "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
+    };
 
     const { error: e3 } = await sb
       .from(KANBAN.TABLE)
       .update(leadPayload)
       .eq("id", h.lead_id);
+
     if(e3) throw e3;
 
     // 4) marca o handoff como aceito
@@ -384,6 +382,7 @@ async function acceptHandoff(handoffId){
       .from("lead_handoffs")
       .update({ status: "aceito", respondido_em: new Date().toISOString() })
       .eq("id", h.id);
+
     if(e4) throw e4;
 
     closeModal();
@@ -1497,7 +1496,7 @@ document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
 
       overlay.classList.remove('hidden');
     }
-acceptHandoff
+
 
     function closeModal(){
       const overlay = document.getElementById('modalOverlay');
