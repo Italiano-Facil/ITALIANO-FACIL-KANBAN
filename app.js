@@ -344,29 +344,33 @@ async function acceptHandoff(handoffId){
       .single();
     if(e1) throw e1;
 
+    if(!h?.lead_id || !h?.para_atendente_id){
+      throw new Error("Handoff inválido (sem lead_id/para_atendente_id).");
+    }
+
+    // pega atendente que vai receber (NO COMERCIAL)
     const { data: at, error: e2 } = await sb
       .from("atendentes")
-      .select("id, nome, manychat_name")
+      .select("id, nome, manychat_name")  // id aqui é o atendentes.id
       .eq("id", h.para_atendente_id)
       .single();
     if(e2) throw e2;
 
     const atendenteNome = (at?.manychat_name || at?.nome || "—").trim();
-    const now = new Date();
 
+    const now = new Date();
     const leadPayload = {
-      "responsavel-id": atendenteNome,
-      responsavel_id: at.id, // ✅ atendentes.id
+      responsavel_id: at.id,                 // ✅ atendentes.id
+      "responsavel-id": atendenteNome,       // ✅ texto
+      responsavel_nome: atendenteNome,       // ✅ se existir
       "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
       "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
     };
 
-    const { data: up, error: e3 } = await sb
+    const { error: e3 } = await sb
       .from(KANBAN.TABLE)
       .update(leadPayload)
-      .eq("id", h.lead_id)
-      .select("id, responsavel-id, responsavel_id")
-      .single();
+      .eq("id", h.lead_id);
     if(e3) throw e3;
 
     const { error: e4 } = await sb
@@ -703,16 +707,13 @@ let q = sb
 
 if (!AUTH.isAdmin) {
   if (!AUTH.atendenteId) {
-    return { error: "Seu usuário não está vinculado a um atendente (auth_user_id). Fale com o admin para vincular." };
+    return { error: "Seu usuário não está vinculado a um atendente. Fale com o admin para vincular." };
   }
 
-const uid = AUTH.session?.user?.id;
-const myAtendenteId = AUTH.atendenteId; // ✅ atendentes.id
+  const uid = AUTH.session?.user?.id;
+  const myAtendenteId = AUTH.atendenteId; // atendentes.id
 
-q = q.or(`responsavel_id.eq.${myAtendenteId},created_by_auth.eq.${uid}`);
-
-  // ✅ traz: (1) leads atribuídos a mim  OU  (2) leads que eu criei
-  q = q.or(`responsavel-id.eq."${safeName}",created_by_auth.eq.${uid}`);
+  q = q.or(`responsavel_id.eq.${myAtendenteId},created_by_auth.eq.${uid}`);
 }
 
 const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
@@ -1116,25 +1117,34 @@ async function assignLead(leadId){
     const atendenteNome = (atendente.manychat_name || atendente.nome || "—").trim();
     const now = new Date();
 
-const payload = {
-  responsavel_id: atendente.id,            // ✅ atendentes.id (uuid)
-  "responsavel-id": atendenteNome,         // ✅ texto
-  "origem-id": origem,
-  "Motivo": motivo,
-  "fluxo-id": fluxo,
-  "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
-  "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
-};
+    const payload = {
+      responsavel_id: atendente.id,               // FK atendentes.id
+      "responsavel-id": atendenteNome,            // texto
+      responsavel_nome: atendenteNome,            // se existir
+      "origem-id": origem,
+      "Motivo": motivo,
+      "fluxo-id": fluxo,
+      "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
+      "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
+    };
 
-    const { error } = await sb
+    const { error: upErr } = await sb
       .from(KANBAN.TABLE)
       .update(payload)
       .eq("id", leadId);
 
-    if(error) throw error;
+    if (upErr) throw upErr;
+
+    // debug (opcional)
+    const { data: row, error: selErr } = await sb
+      .from(KANBAN.TABLE)
+      .select('id, Manychat_id, "responsavel-id", responsavel_id, responsavel_nome')
+      .eq("id", leadId)
+      .single();
+
+    console.log("assignLead RESULT:", { leadId, payload, row, selErr });
 
     await reload();
-
     showToast("Atribuído ✅", `Lead → ${atendenteNome}`, "success", 2400);
 
   }catch(err){
@@ -1343,6 +1353,7 @@ function setupPreVendasListeners(){
       return `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
     }
     function openCreateLead(){
+  fillAtendentesSelect();
   MODAL.open = true;
   MODAL.mode = "create";
   MODAL.card = null;
@@ -1365,7 +1376,7 @@ function setupPreVendasListeners(){
 
   modalTitle.textContent = "Novo Lead";
   modalSub.textContent = "Preencha os dados e clique em Salvar";
-
+    
   fNome.value = "";
   fTelefone.value = "";
   fFluxo.value = "Inicial";
@@ -1447,9 +1458,14 @@ function setupPreVendasListeners(){
 
     /*********************** MODAL *************************************/
     function openModal(id) {
-      MODAL.mode = "edit";
-      const card = (STATE.cards || []).find(c => String(c.id) === String(id));
-      if (!card) return;
+       MODAL.mode = "edit";
+  const card = (STATE.cards || []).find(c => String(c.id) === String(id));
+  if (!card) return;
+
+  fillAtendentesSelect().then(()=> {
+    const fResp = document.getElementById('fResponsavel');
+    if (fResp) fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
+  });
 
       const modalTitle = document.getElementById('modalTitle');
       const modalSub   = document.getElementById('modalSub');
@@ -1473,7 +1489,7 @@ function setupPreVendasListeners(){
       document.getElementById('fNome').value = card.name || '';
 document.getElementById('fTelefone').value = card.phone || '';
 document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
-
+    await fillAtendentesSelect();
       fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
       fOrig.value = card.origem !== '—' ? (card.origem || '') : '';
       fMotivo.value = card.motivo || '';
