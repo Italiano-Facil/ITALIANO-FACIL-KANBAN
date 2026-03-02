@@ -343,6 +343,11 @@ async function acceptHandoff(handoffId){
       .select("id, lead_id, para_atendente_id, status")
       .eq("id", handoffId)
       .single();
+      const { data: at, error: e2 } = await sb
+  .from("atendentes")
+  .select("id, nome, manychat_name, auth_user_id") // ✅ AQUI
+  .eq("id", h.para_atendente_id)
+  .single();
     if(e1) throw e1;
 
     if(!h?.lead_id || !h?.para_atendente_id){
@@ -361,14 +366,12 @@ async function acceptHandoff(handoffId){
 
     // 3) atualiza o lead: atribui responsável
     const now = new Date();
-    const leadPayload = {
-      "responsavel-id": atendenteNome,
-      responsavel_id: h.para_atendente_id, // se teu schema tiver esse campo
-      "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
-      "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
-      // opcional: já empurra pra etapa de comercial
-      // "fluxo-id": "A02",
-    };
+   const leadPayload = {
+  "responsavel-id": atendenteNome,
+  responsavel_id: at?.auth_user_id || null,  // ✅ AQUI
+  "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
+  "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
+};
 
     const { error: e3 } = await sb
       .from(KANBAN.TABLE)
@@ -492,10 +495,10 @@ async function setView(which){
       if (btnExp) btnExp.addEventListener('click', () => exportMetrics());
     }
 
-    async function loadAtendentes(){
+async function loadAtendentes(){
   const { data, error } = await sb
     .from("atendentes")
-    .select("id, nome, ativo")
+    .select("id, nome, ativo, manychat_name, auth_user_id") // ✅ AQUI
     .eq("ativo", true)
     .order("nome", { ascending: true });
 
@@ -600,13 +603,11 @@ async function reload(){
 async function loadAtendentesComercial(){
   const { data, error } = await sb
     .from("atendentes")
-    .select("id, nome, manychat_name, ativo")
+   .select("id, nome, manychat_name, ativo, auth_user_id") // ✅ AQUI
     .eq("ativo", true)
     .order("nome", { ascending: true });
 
   if(error) throw error;
-
-  // não mandar para si mesmo
   return (data || []).filter(a => String(a.id) !== String(AUTH.atendenteId));
 }
 
@@ -1116,34 +1117,38 @@ function renderUnassigned(){
     return;
   }
 
-  const atendente = (STATE.atendentes || []).find(a => String(a.id) === String(atendenteId));
-  const atendenteNome = atendente?.nome || "—";
+const atendente = (STATE.atendentes || []).find(a => String(a.id) === String(atendenteId));
+if(!atendente){
+  showToast("Erro", "Atendente não encontrado", "error");
+  return;
+}
 
-  const now = new Date();
+const atendenteNome = (atendente.manychat_name || atendente.nome || "—").trim();
+const atendenteAuthId = atendente.auth_user_id || null; // ✅ UUID
 
-  // ✅ Ajuste os campos conforme teu banco REAL:
-  // - responsavel_id (id do atendente)
-  // - 'responsavel-id' (nome do atendente) -> teu front usa isso
-  // - 'origem-id', 'Motivo', 'fluxo-id'
-  const payload = {
-    responsavel_id: atendenteId,
-    "responsavel-id": atendenteNome,
-    "origem-id": origem,
-    "Motivo": motivo,
-    "fluxo-id": fluxo,
-    "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
-    "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
-  };
+const atendente = (STATE.atendentes || []).find(a => String(a.id) === String(atendenteId));
+const atendenteNome = atendente?.manychat_name || atendente?.nome || "—";
 
-  showToast("Atribuindo…", `${atendenteNome}`, "info", 1600);
+const payload = {
+  responsavel_id: atendente?.auth_user_id || null,   // ✅ AQUI
+  "responsavel-id": atendenteNome,
+  "origem-id": origem,
+  "Motivo": motivo,
+  "fluxo-id": fluxo,
+  "Data da mudança do fluxo": now.toLocaleDateString('pt-BR'),
+  "Hora da mudança do fluxo": now.toLocaleTimeString('pt-BR')
+};
 
-  try{
-    const { error } = await sb
-      .from(KANBAN.TABLE)
-      .update(payload)
-      .eq("id", leadId);
+const { data, error } = await sb
+  .from(KANBAN.TABLE)
+  .update(payload)
+  .eq("id", leadId)
+  .select("id, responsavel-id, responsavel_id")   // 👈 ajuda a confirmar que gravou
+  .single();
 
-    if(error) throw error;
+if(error) throw error;
+
+console.log("UPDATED:", data);
 
     // Atualiza STATE localmente (sem reload total)
     const card = (STATE.cards || []).find(c => String(c.id) === String(leadId));
