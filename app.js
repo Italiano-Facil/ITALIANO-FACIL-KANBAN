@@ -1457,51 +1457,54 @@ function setupPreVendasListeners(){
     }
 
     /*********************** MODAL *************************************/
-    function openModal(id) {
-       MODAL.mode = "edit";
+async function openModal(id) {
+  MODAL.mode = "edit";
+
   const card = (STATE.cards || []).find(c => String(c.id) === String(id));
   if (!card) return;
 
-  fillAtendentesSelect().then(()=> {
-    const fResp = document.getElementById('fResponsavel');
-    if (fResp) fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
-  });
+  const modalTitle = document.getElementById('modalTitle');
+  const modalSub   = document.getElementById('modalSub');
+  const fNome      = document.getElementById('fNome');
+  const fTelefone  = document.getElementById('fTelefone');
+  const fFluxo     = document.getElementById('fFluxo');
+  const fResp      = document.getElementById('fResponsavel');
+  const fOrig      = document.getElementById('fOrigem');
+  const fMotivo    = document.getElementById('fMotivo');
+  const overlay    = document.getElementById('modalOverlay');
+  const waBtn      = document.getElementById('waBtn');
 
-      const modalTitle = document.getElementById('modalTitle');
-      const modalSub   = document.getElementById('modalSub');
-      const fResp      = document.getElementById('fResponsavel');
-      const fOrig      = document.getElementById('fOrigem');
-      const fMotivo    = document.getElementById('fMotivo');
-      const overlay    = document.getElementById('modalOverlay');
-      const waBtn      = document.getElementById('waBtn');
+  if (!modalTitle || !modalSub || !fNome || !fTelefone || !fFluxo || !fResp || !fOrig || !fMotivo || !overlay) {
+    console.warn("Modal não encontrado. Verifique IDs do modal.");
+    showToast("Modal não encontrado", "IDs do modal não existem no HTML", "error", 5200);
+    return;
+  }
 
-      if (!modalTitle || !modalSub || !fResp || !fOrig || !fMotivo || !overlay) {
-        console.warn("Modal não encontrado. Verifique IDs do modal.");
-        showToast("Modal não encontrado", "IDs do modal não existem no HTML", "error", 5200);
-        return;
-      }
+  MODAL.open = true;
+  MODAL.card = card;
 
-      MODAL.open = true;
-      MODAL.card = card;
+  modalTitle.textContent = card.name || 'Lead';
+  modalSub.textContent = 'Fluxo: ' + card.fluxo + ' • ID: ' + card.id;
 
-      modalTitle.textContent = card.name || 'Lead';
-      modalSub.textContent = 'Fluxo: ' + card.fluxo + ' • ID: ' + card.id;
-      document.getElementById('fNome').value = card.name || '';
-document.getElementById('fTelefone').value = card.phone || '';
-document.getElementById('fFluxo').value = card.fluxo || 'Inicial';
-    await fillAtendentesSelect();
-      fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
-      fOrig.value = card.origem !== '—' ? (card.origem || '') : '';
-      fMotivo.value = card.motivo || '';
+  fNome.value = card.name || '';
+  fTelefone.value = card.phone || '';
+  fFluxo.value = card.fluxo || 'Inicial';
 
-      if (waBtn) {
-        const link = buildWaLink(card.phone);
-        if (link) { waBtn.href = link; waBtn.classList.remove('hidden'); }
-        else { waBtn.classList.add('hidden'); }
-      }
+  // ✅ carrega lista e só depois seta o valor
+  await fillAtendentesSelect();
+  fResp.value = card.responsavel !== '—' ? (card.responsavel || '') : '';
 
-      overlay.classList.remove('hidden');
-    }
+  fOrig.value = card.origem !== '—' ? (card.origem || '') : '';
+  fMotivo.value = card.motivo || '';
+
+  if (waBtn) {
+    const link = buildWaLink(card.phone);
+    if (link) { waBtn.href = link; waBtn.classList.remove('hidden'); }
+    else { waBtn.classList.add('hidden'); }
+  }
+
+  overlay.classList.remove('hidden');
+}
 
 
     function closeModal(){
