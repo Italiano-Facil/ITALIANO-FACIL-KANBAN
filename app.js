@@ -67,11 +67,21 @@ if (!window.supabase || !window.supabase.createClient) {
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     /*********************** KANBAN CONFIG *****************************/
-    const KANBAN = {
-      TABLE: "Leads-Geral1",
-      STAGES: ['Inicial', 'A02', 'A03', 'A04', 'Link-Enviado', 'Parabéns'],
-      SLA: { warnMin: 30, dangerMin: 60 }
-    };
+ const KANBAN = {
+  TABLE: "Leads-Geral1",
+  STAGES: [
+    'Inicial',
+    'A02',
+    'Recall A02',
+    'A03',
+    'Recall A03',
+    'A04',
+    'Recall A04',
+    'Link-Enviado',
+    'Parabéns'
+  ],
+  SLA: { warnMin: 30, dangerMin: 60 }
+};
 
     /*********************** CHART GLOBALS *****************************/
     Chart.defaults.color = '#9aa7b4';
