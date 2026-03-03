@@ -1413,14 +1413,11 @@ function setupPreVendasListeners(){
       (STATE.cards || []).forEach(c => { if (c.responsavel && c.responsavel !== '—') repsSet.add(c.responsavel); });
       const sellersArray = Array.from(repsSet).sort();
 
-      const stageColors = [
-        'rgba(34,197,94,0.85)',
-        'rgba(59,130,246,0.85)',
-        'rgba(245,158,11,0.85)',
-        'rgba(239,68,68,0.85)',
-        'rgba(168,85,247,0.85)',
-        'rgba(20,184,166,0.85)'
-      ];
+  const stageColors = (STATE.stages || []).map((_, i) => {
+  // cores distribuídas por HSL (boa o suficiente e não quebra)
+  const hue = Math.round((i * 360) / Math.max(1, (STATE.stages || []).length));
+  return `hsla(${hue}, 80%, 60%, 0.85)`;
+});
 
       const datasetsFunilVendedor = (STATE.stages || []).map((stage, index) => ({
         label: stage,
