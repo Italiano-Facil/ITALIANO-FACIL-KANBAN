@@ -43,9 +43,18 @@
         <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
           <i class="ph ph-user-plus"></i> Não atribuído
         </button>
-        <button id="navPreVendas" type="button" onclick="setView('prevendas')">
-          <i class="ph ph-paper-plane-tilt"></i> Pré-vendas
-        </button>
+<button id="navPvCreate" type="button" onclick="setView('pvcreate')">
+  <i class="ph ph-user-plus"></i> Cadastrar lead
+</button>
+<button id="navPvSend" type="button" onclick="setView('pvsend')">
+  <i class="ph ph-paper-plane-tilt"></i> Encaminhar lead
+</button>
+
+
+
+<button id="navPvLeads" type="button" onclick="setView('pvleads')">
+  <i class="ph ph-list-bullets"></i> Leads inativos
+</button>
         <button id="navRejected" type="button" onclick="setView('rejected')">
           <i class="ph ph-x-circle"></i> Leads Recusados
         </button>
@@ -71,169 +80,232 @@
       </div>
     </aside>
 
-    <section class="main">
-      <header class="topbar" style="display: flex; flex-direction: column; gap: 14px; padding: 18px 22px;">
-        
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-          <div style="display: flex; align-items: baseline; gap: 12px;">
-            <div class="title" style="margin:0;">Fácil CRM <span class="badge"></span></div>
-            <div id="updatedAt" class="muted" style="margin:0;">Carregando...</div>
+<section class="main">
+  <header class="topbar" style="display: flex; flex-direction: column; gap: 14px; padding: 18px 22px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <div class="title" style="margin:0;">Fácil CRM <span class="badge"></span></div>
+        <div id="updatedAt" class="muted" style="margin:0;">Carregando...</div>
+      </div>
+
+      <button id="btnToggleHeader" class="iconbtn kanban-only" type="button" onclick="toggleTopbar()" title="Minimizar Cabeçalho">
+        <i id="toggleIcon" class="ph ph-caret-up"></i>
+      </button>
+    </div>
+
+    <div id="kanbanTools" style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 14px;">
+      <div class="metrics" style="margin: 0;">
+        <div class="metric" style="min-width: 120px; padding: 8px 12px;">
+          <div class="label">Total</div>
+          <div class="value"><span class="dot"></span> <span id="mTotal">—</span></div>
+        </div>
+        <div class="metric" style="min-width: 120px; padding: 8px 12px;">
+          <div class="label">SLA Crítico</div>
+          <div class="value"><i class="ph ph-timer"></i> <span id="mSla">—</span></div>
+        </div>
+        <div class="metric" style="min-width: 140px; padding: 8px 12px;">
+          <div class="label">Auto-refresh</div>
+          <div class="value">
+            <label class="switch">
+              <input id="autoRefresh" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
+            <span id="autoRefreshLabel" class="muted-inline">on (30s)</span>
           </div>
-          
-          <button id="btnToggleHeader" class="iconbtn kanban-only" type="button" onclick="toggleTopbar()" title="Minimizar Cabeçalho">
-            <i id="toggleIcon" class="ph ph-caret-up"></i>
+        </div>
+      </div>
+
+      <div class="top-actions" style="margin: 0;">
+        <select id="filterOrigem" class="input" style="width:140px;">
+          <option value="">Origens</option>
+        </select>
+        <select id="filterResponsavel" class="input" style="width:160px;">
+          <option value="">Responsáveis</option>
+        </select>
+        <input id="search" class="input" style="width:180px;" placeholder="Buscar lead..." />
+
+        <button class="btn" type="button" onclick="toggleCompact()">
+          <i class="ph ph-text-aa"></i>
+        </button>
+        <button class="btn primary" type="button" onclick="openCreateLead()">
+          <i class="ph ph-plus"></i>
+        </button>
+        <button class="btn primary" type="button" onclick="reload()">
+          <i class="ph ph-arrows-clockwise"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="content">
+    <main id="board" class="board">
+      <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
+        <i class="ph ph-hourglass-medium"></i> Carregando dados...
+      </div>
+    </main>
+
+    <main id="pvcreate" class="page hidden">
+      <div class="chart-card" style="margin-bottom:14px;">
+        <div class="chart-title">
+          <div class="left"><i class="ph ph-user-plus"></i> Novo lead (Pré-vendas)</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:12px;">
+          <input id="pvNome" class="input" placeholder="Nome do lead" />
+          <input id="pvTelefone" class="input" placeholder="Telefone/WhatsApp" />
+          <select id="pvOrigem" class="input">
+            <option value="META">META</option>
+            <option value="Google">Google</option>
+            <option value="Bio/Instagram">Bio/Instagram</option>
+            <option value="Não identificado">Não identificado</option>
+            <option value="Formulário Elementor">Formulário Elementor</option>
+            <option value="DM/Instagram">DM/Instagram</option>
+            <option value="Outros">Outros</option>
+          </select>
+        </div>
+
+        <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+          <select id="pvFluxo" class="input" style="width:auto;">
+            <option value="Inicial">Inicial</option>
+            <option value="A02">A02</option>
+            <option value="Recall A02">Recall A02</option>
+            <option value="A03">A03</option>
+            <option value="Recall A03">Recall A03</option>
+            <option value="A04">A04</option>
+            <option value="Recall A04">Recall A04</option>
+            <option value="Link-Enviado">Link-Enviado</option>
+          </select>
+
+          <input id="pvMotivo" class="input" style="min-width:320px; flex:1;" placeholder="Observação rápida (o que a pessoa quer?)" />
+
+          <button class="btn primary" type="button" onclick="pvCreateLead()">
+            <i class="ph ph-plus"></i> Cadastrar lead
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <main id="pvleads" class="page hidden">
+      <div class="chart-card">
+        <div class="chart-title">
+          <div class="left"><i class="ph ph-list-bullets"></i> Leads parados há mais de 3 dias</div>
+          <div class="pill">Total: <span id="pvCount">0</span></div>
+        </div>
+
+        <div style="margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap;">
+          <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar lead..." /> 
+          <select id="pvFilterStage" class="input" style="width:auto;">
+            <option value="">Todas etapas</option>
+            <option value="Inicial">Inicial</option>
+            <option value="A02">A02</option>
+            <option value="Recall A02">Recall A02</option>
+            <option value="A03">A03</option>
+            <option value="Recall A03">Recall A03</option>
+            <option value="A04">A04</option>
+            <option value="Recall A04">Recall A04</option>
+            <option value="Link-Enviado">Link-Enviado</option>
+          </select>
+          <button class="btn primary" type="button" onclick="renderPreVendas()">
+            <i class="ph ph-arrows-clockwise"></i> Atualizar
           </button>
         </div>
 
-        <div id="kanbanTools" style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 14px;">
-          
-          <div class="metrics" style="margin: 0;">
-            <div class="metric" style="min-width: 120px; padding: 8px 12px;">
-              <div class="label">Total</div>
-              <div class="value"><span class="dot"></span> <span id="mTotal">—</span></div>
-            </div>
-            <div class="metric" style="min-width: 120px; padding: 8px 12px;">
-              <div class="label">SLA Crítico</div>
-              <div class="value"><i class="ph ph-timer"></i> <span id="mSla">—</span></div>
-            </div>
-            <div class="metric" style="min-width: 140px; padding: 8px 12px;">
-              <div class="label">Auto-refresh</div>
-              <div class="value">
-                <label class="switch">
-                  <input id="autoRefresh" type="checkbox" checked />
-                  <span class="slider"></span>
-                </label>
-                <span id="autoRefreshLabel" class="muted-inline">on (30s)</span>
-              </div>
-            </div>
-          </div>
+        <div id="prevendasWrap"></div>
+      </div>
+    </main>
+<main id="pvsend" class="page hidden">
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-paper-plane-tilt"></i> Criar e encaminhar lead para atendente</div>
+    </div>
 
-          <div class="top-actions" style="margin: 0;">
-            <select id="filterOrigem" class="input" style="width:140px;">
-              <option value="">Origens</option>
-            </select>
-            <select id="filterResponsavel" class="input" style="width:160px;">
-              <option value="">Responsáveis</option>
-            </select>
-            <input id="search" class="input" style="width:180px;" placeholder="Buscar lead..." />
-            
-            <button class="btn" type="button" onclick="toggleCompact()">
-              <i class="ph ph-text-aa"></i>
-            </button>
-            <button class="btn primary" type="button" onclick="openCreateLead()">
-              <i class="ph ph-plus"></i>
-            </button>
-            <button class="btn primary" type="button" onclick="reload()">
-              <i class="ph ph-arrows-clockwise"></i>
-            </button>
-          </div>
-          
+    <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+      <input id="pvSendNome" class="input" placeholder="Nome do lead" />
+      <input id="pvSendTelefone" class="input" placeholder="Telefone/WhatsApp" />
+      <select id="pvSendOrigem" class="input">
+        <option value="META">META</option>
+        <option value="Google">Google</option>
+        <option value="Bio/Instagram">Bio/Instagram</option>
+        <option value="Não identificado">Não identificado</option>
+        <option value="Formulário Elementor">Formulário Elementor</option>
+        <option value="DM/Instagram">DM/Instagram</option>
+        <option value="Outros">Outros</option>
+      </select>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <select id="pvSendFluxo" class="input">
+        <option value="Inicial">Inicial</option>
+        <option value="A02">A02</option>
+        <option value="Recall A02">Recall A02</option>
+        <option value="A03">A03</option>
+        <option value="Recall A03">Recall A03</option>
+        <option value="A04">A04</option>
+        <option value="Recall A04">Recall A04</option>
+        <option value="Link-Enviado">Link-Enviado</option>
+      </select>
+
+      <select id="pvSendPara" class="input">
+        <option value="">Selecionar atendente…</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <textarea
+        id="pvSendNota"
+        class="input"
+        style="min-height:110px; resize:vertical;"
+        placeholder="O que o lead quer? Contexto, urgência, perfil, observações..."
+      ></textarea>
+    </div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn primary" type="button" onclick="pvCreateAndSendLead()">
+        <i class="ph ph-paper-plane-tilt"></i> Criar e encaminhar
+      </button>
+
+      <button class="btn" type="button" onclick="clearPvSendForm()">
+        <i class="ph ph-eraser"></i> Limpar
+      </button>
+    </div>
+  </div>
+</main>
+
+    <main id="received" class="page hidden">
+      <div class="chart-card" style="width:100%;">
+        <div class="chart-title">
+          <div class="left"><i class="ph ph-tray"></i> Leads Recebidos (Encaminhados para você)</div>
+          <button class="btn primary" type="button" onclick="renderReceived()">
+            <i class="ph ph-arrows-clockwise"></i> Atualizar
+          </button>
         </div>
-      </header>
+        <div id="receivedWrap"></div>
+      </div>
+    </main>
 
-      <div class="content">
-        <main id="board" class="board">
-          <div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;">
-            <i class="ph ph-hourglass-medium"></i> Carregando dados...
-          </div>
-        </main>
+    <main id="rejected" class="page hidden">
+      <div class="chart-card" style="width:100%;">
+        <div class="chart-title">
+          <div class="left"><i class="ph ph-x-circle"></i> Leads recusados pelo Comercial</div>
+          <button class="btn primary" type="button" onclick="renderRejected()">
+            <i class="ph ph-arrows-clockwise"></i> Atualizar
+          </button>
+        </div>
+        <div id="rejectedWrap"></div>
+      </div>
+    </main>
 
-        <main id="received" class="page hidden">
-          <div class="chart-card" style="width:100%;">
-            <div class="chart-title">
-              <div class="left"><i class="ph ph-tray"></i> Leads Recebidos (Encaminhados para você)</div>
-              <button class="btn primary" type="button" onclick="renderReceived()">
-                <i class="ph ph-arrows-clockwise"></i> Atualizar
-              </button>
-            </div>
-            <div id="receivedWrap"></div>
-          </div>
-        </main>
-
-        <main id="prevendas" class="page hidden">
-          <div class="chart-card" style="margin-bottom:14px;">
-            <div class="chart-title">
-              <div class="left"><i class="ph ph-user-plus"></i> Novo lead (Pré-vendas)</div>
-              <div class="pill">Total: <span id="pvCount">0</span></div>
-            </div>
-            <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:12px;">
-              <input id="pvNome" class="input" placeholder="Nome do lead" />
-              <input id="pvTelefone" class="input" placeholder="Telefone/WhatsApp" />
-              <select id="pvOrigem" class="input">
-                <option value="META">META</option>
-                <option value="Google">Google</option>
-                <option value="Bio/Instagram">Bio/Instagram</option>
-                <option value="Não identificado">Não identificado</option>
-                <option value="Formulário Elementor">Formulário Elementor</option>
-                <option value="DM/Instagram">DM/Instagram</option>
-                <option value="Outros">Outros</option>
-              </select>
-            </div>
-            <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-<select id="pvFluxo" class="input" style="width:auto;">
-  <option value="Inicial">Inicial</option>
-  <option value="A02">A02</option>
-  <option value="Recall A02">Recall A02</option>
-  <option value="A03">A03</option>
-  <option value="Recall A03">Recall A03</option>
-  <option value="A04">A04</option>
-  <option value="Recall A04">Recall A04</option>
-  <option value="Link-Enviado">Link-Enviado</option>
-</select>
-              <select id="pvParaAtendente" class="input" style="width:auto;">
-                <option value="">Selecionar atendente...</option>
-              </select>
-              <input id="pvMotivo" class="input" style="min-width:320px; flex:1;" placeholder="Observação rápida (o que a pessoa quer?)" />
-              <button class="btn primary" type="button" onclick="pvCreateLead()">
-                <i class="ph ph-plus"></i> Cadastrar lead
-              </button>
-            </div>
-            <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-              <input id="pvSearch" class="input" style="width:260px" placeholder="Buscar nos meus leads..." />
-<select id="pvFilterStage" class="input" style="width:auto;">
-  <option value="">Todas etapas</option>
-  <option value="Inicial">Inicial</option>
-  <option value="A02">A02</option>
-  <option value="Recall A02">Recall A02</option>
-  <option value="A03">A03</option>
-  <option value="Recall A03">Recall A03</option>
-  <option value="A04">A04</option>
-  <option value="Recall A04">Recall A04</option>
-  <option value="Link-Enviado">Link-Enviado</option>
-</select>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">
-              <div class="left"><i class="ph ph-list-bullets"></i> Meus leads de pré-vendas</div>
-            </div>
-            <div id="prevendasWrap"></div>
-          </div>
-        </main>
-
-        <main id="rejected" class="page hidden">
-          <div class="chart-card" style="width:100%;">
-            <div class="chart-title">
-              <div class="left"><i class="ph ph-x-circle"></i> Leads recusados pelo Comercial</div>
-              <button class="btn primary" type="button" onclick="renderRejected()">
-                <i class="ph ph-arrows-clockwise"></i> Atualizar
-              </button>
-            </div>
-            <div id="rejectedWrap"></div>
-          </div>
-        </main>
-
-        <main id="unassigned" class="page hidden">
-          <div class="chart-card" style="width:100%;">
-            <div class="chart-title">
-              <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
-              <button class="btn primary" type="button" onclick="reload()">
-                <i class="ph ph-arrows-clockwise"></i> Atualizar lista
-              </button>
-            </div>
-            <div id="unassignedWrap"></div>
-          </div>
-        </main>
-
+    <main id="unassigned" class="page hidden">
+      <div class="chart-card" style="width:100%;">
+        <div class="chart-title">
+          <div class="left"><i class="ph ph-user-plus"></i> Leads não atribuídos</div>
+          <button class="btn primary" type="button" onclick="reload()">
+            <i class="ph ph-arrows-clockwise"></i> Atualizar lista
+          </button>
+        </div>
+        <div id="unassignedWrap"></div>
+      </div>
+    </main>
         <main id="dashboard" class="dashboard hidden">
           <div class="chart-card">
             <div class="chart-title">
@@ -279,39 +351,127 @@
           </div>
         </main>
 
-        <main id="reports" class="reports hidden">
-          <div class="chart-card">
-            <div class="chart-title">
-              <div class="left"><i class="ph ph-file-text"></i> Resumo (Top Vendedores / Top Origens)</div>
-              <button class="btn" type="button" onclick="exportLeadsXlsx()">
-                <i class="ph ph-download-simple"></i> Exportar LEADS (XLSX)
-              </button>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr; gap:14px;">
-              <div>
-                <div style="color:var(--muted); font-weight:1000; font-size:11px; letter-spacing:.6px; text-transform:uppercase; margin-bottom:8px;">
-                  Top vendedores por compras
-                </div>
-                <div id="repTableWrap"></div>
-              </div>
-              <div>
-                <div style="color:var(--muted); font-weight:1000; font-size:11px; letter-spacing:.6px; text-transform:uppercase; margin-bottom:8px;">
-                  Top origens por conversão
-                </div>
-                <div id="originTableWrap"></div>
-              </div>
-            </div>
-          </div>
+<main id="reports" class="reports hidden">
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-file-text"></i> Central de Relatórios</div>
+    </div>
 
-          <div class="chart-card">
-            <div class="chart-title">
-              <div class="left"><i class="ph ph-magnifying-glass"></i> Auditoria rápida</div>
-            </div>
-            <div id="auditBox" style="color:rgba(255,255,255,.88); font-weight:800; font-size:13px; line-height:1.4;">
-              —
-            </div>
-          </div>
-        </main>
+    <div class="reports-filters-grid">
+      <div class="field">
+        <label>Tipo de relatório</label>
+        <select id="reportType" class="input">
+          <option value="leads_all">Todos os leads</option>
+          <option value="leads_by_seller">Leads por vendedor</option>
+          <option value="leads_by_flow">Leads por fluxo</option>
+          <option value="converted">Leads convertidos</option>
+          <option value="stopped">Leads parados</option>
+          <option value="origins">Resumo por origem</option>
+          <option value="handoffs">Handoffs</option>
+          <option value="rejected_handoffs">Recusas</option>
+          <option value="audit_logs">Auditoria</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Período rápido</label>
+        <select id="reportPeriod" class="input">
+          <option value="all">Todo período</option>
+          <option value="today">Hoje</option>
+          <option value="yesterday">Ontem</option>
+          <option value="7d">Últimos 7 dias</option>
+          <option value="30d">Últimos 30 dias</option>
+          <option value="month">Este mês</option>
+          <option value="custom">Personalizado</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Vendedor</label>
+        <select id="reportSeller" class="input">
+          <option value="">Todos os vendedores</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Fluxo</label>
+        <select id="reportFlow" class="input">
+          <option value="">Todos os fluxos</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Data inicial</label>
+        <input id="reportDateStart" type="date" class="input" />
+      </div>
+
+      <div class="field">
+        <label>Data final</label>
+        <input id="reportDateEnd" type="date" class="input" />
+      </div>
+    </div>
+
+    <div class="reports-format-row">
+      <div></div>
+      <div class="field">
+        <label>Formato</label>
+        <select id="reportFormat" class="input">
+          <option value="xlsx">XLSX</option>
+          <option value="csv">CSV</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn primary" type="button" onclick="generateReport()">
+        <i class="ph ph-file-arrow-down"></i> Gerar relatório
+      </button>
+
+      <button class="btn" type="button" onclick="exportLeadsXlsx()">
+        <i class="ph ph-download-simple"></i> Exportar todos os leads
+      </button>
+
+      <button class="btn" type="button" onclick="exportMetrics()">
+        <i class="ph ph-chart-bar"></i> Exportar métricas
+      </button>
+    </div>
+
+    <div style="margin-top:12px; color:var(--muted); font-size:12px; font-weight:800;">
+      Você pode exportar relatórios em XLSX ou CSV com filtros por tipo, período, vendedor e fluxo.
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-file-text"></i> Resumo (Top Vendedores / Top Origens)</div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr; gap:14px;">
+      <div>
+        <div style="color:var(--muted); font-weight:900; font-size:11px; letter-spacing:.6px; text-transform:uppercase; margin-bottom:8px;">
+          Top vendedores por compras
+        </div>
+        <div id="repTableWrap"></div>
+      </div>
+
+      <div>
+        <div style="color:var(--muted); font-weight:900; font-size:11px; letter-spacing:.6px; text-transform:uppercase; margin-bottom:8px;">
+          Top origens por conversão
+        </div>
+        <div id="originTableWrap"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left"><i class="ph ph-magnifying-glass"></i> Auditoria rápida</div>
+    </div>
+    <div id="auditBox" style="color:rgba(255,255,255,.88); font-weight:800; font-size:13px; line-height:1.4;">
+      —
+    </div>
+  </div>
+</main>
 
         <main id="settings" class="settings hidden">
           <div class="chart-card">
@@ -468,4 +628,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
