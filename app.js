@@ -98,10 +98,12 @@ if (!window.supabase || !window.supabase.createClient) {
     let MODAL = { open: false, card: null, mode: "edit" }; // "edit" | "create"
     let charts = { funil: null, consultor: null, sla: null, links: null, conversao: null, funilVendedor: null };
     let VIEW = "kanban";
-    let AUTH = {
+let AUTH = {
   session: null,
   atendente: null,
+  atendenteId: null,
   isAdmin: false,
+  isPreVendas: false,
 };
 
     // settings locais
@@ -112,14 +114,19 @@ if (!window.supabase || !window.supabase.createClient) {
       compact: false
     };
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      setupListeners();
-      await protectWithAuth();
-      await reload();
-      setAutoRefresh(true);
-      syncSettingsUI();
-      setupPreVendasListeners();
-    });
+document.addEventListener('DOMContentLoaded', async () => {
+  setupListeners();
+  await protectWithAuth();
+  applyRoleUI();
+  setupPreVendasListeners();
+  await reload();
+  setAutoRefresh(true);
+  syncSettingsUI();
+
+  if (AUTH.isPreVendas) {
+    await setView("pvcreate");
+  }
+});
 
     /*********************** AUTH **************************************/
 async function protectWithAuth(){
@@ -137,17 +144,18 @@ async function protectWithAuth(){
     const userInfo = document.getElementById("userInfo");
     if(userInfo) userInfo.textContent = "Logado como: " + session.user.email;
 
-    const { data: atendente, error: e2 } = await sb
-      .from("atendentes")
-      .select("id, nome, manychat_name, ativo, is_admin, auth_user_id")
-      .eq("auth_user_id", session.user.id)
-      .maybeSingle();
+const { data: atendente, error: e2 } = await sb
+  .from("atendentes")
+  .select("id, nome, manychat_name, ativo, is_admin, auth_user_id, perfil")
+  .eq("auth_user_id", session.user.id)
+  .maybeSingle();
 
     if(e2) throw e2;
 
     AUTH.atendente = atendente || null;
     AUTH.atendenteId = atendente?.id || null;
     AUTH.isAdmin = Boolean(atendente?.is_admin);
+    AUTH.isPreVendas = String(atendente?.perfil || "").toLowerCase() === "prevendas";
 
     if (!AUTH.isAdmin && session.user.email === "vinicius@italianofacil.com") {
       AUTH.isAdmin = true;
@@ -169,36 +177,26 @@ async function protectWithAuth(){
   if (navUn) navUn.classList.toggle("hidden", !AUTH.isAdmin);
 }
 
-    async function renderPreVendas(){
+async function renderPreVendas(){
   const wrap = document.getElementById("prevendasWrap");
   const countEl = document.getElementById("pvCount");
   if(!wrap) return;
 
-  // leads disponíveis: aqui você define a regra.
-  // Sugestão: pré-vendas trabalha com Inicial/A02 (ajuste se quiser)
-const base = getPreVendasCards();
+  const base = getPreVendasCards();
 
   const cards = base
     .filter(c => !PV.stage || String(c.fluxo) === String(PV.stage))
     .filter(c => {
       if(!PV.search) return true;
-      const hay = `${c.name||""} ${c.phone||""} ${c.origem||""}`.toLowerCase();
+      const hay = `${c.name||""} ${c.phone||""} ${c.origem||""} ${c.fluxo||""}`.toLowerCase();
       return hay.includes(PV.search);
     })
-    .sort((a,b)=> b.sortTs - a.sortTs);
+    .sort((a,b)=> b.ageSec - a.ageSec);
 
   if(countEl) countEl.textContent = String(cards.length);
 
-  // carrega comercial
-  let comercial = [];
-  try{
-    comercial = await loadAtendentesComercial();
-  }catch(e){
-    console.warn(e);
-  }
-
   if(!cards.length){
-    wrap.innerHTML = `<div style="color:var(--muted); font-weight:900;">Nenhum lead para pré-vendas agora 🎯</div>`;
+    wrap.innerHTML = `<div style="color:var(--muted); font-weight:900;">Nenhum lead parado há mais de 3 dias no mesmo fluxo 🎯</div>`;
     return;
   }
 
@@ -208,49 +206,44 @@ const base = getPreVendasCards();
         <tr>
           <th>Lead</th>
           <th>Telefone</th>
+          <th>Origem</th>
           <th>Etapa</th>
-          <th>Enviar para</th>
-          <th>Anotações</th>
+          <th>Tempo parado</th>
           <th>Ação</th>
         </tr>
       </thead>
       <tbody>
-        ${cards.map(c => `
-          <tr>
-            <td>
-              <b>${escapeHtml(c.name)}</b>
-              <div style="color:var(--muted); font-size:12px;">ID: ${escapeHtml(String(c.id))}</div>
-            </td>
-            <td>${escapeHtml(c.phone || "—")}</td>
-            <td><span class="pill-mini">${escapeHtml(c.fluxo || "—")}</span></td>
-
-            <td>
-              <select class="input" style="width:220px" id="pv-to-${c.id}">
-                <option value="">Selecionar atendente…</option>
-                ${comercial.map(a => `
-                  <option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>
-                `).join("")}
-              </select>
-            </td>
-
-            <td>
-              <input class="input" style="width:320px"
-                     id="pv-note-${c.id}"
-                     placeholder="O que o lead quer? Contexto, urgência, perfil…" />
-            </td>
-
-            <td>
-              <button class="btn primary" type="button" onclick="sendToComercial('${c.id}')">
-                <i class="ph ph-paper-plane-tilt"></i> Enviar
-              </button>
-            </td>
-          </tr>
-        `).join("")}
+        ${cards.map(c => {
+          const waLink = buildWaLink(c.phone);
+          return `
+            <tr>
+              <td>
+                <b>${escapeHtml(c.name)}</b>
+                <div style="color:var(--muted); font-size:12px;">ID: ${escapeHtml(String(c.id))}</div>
+              </td>
+              <td>${escapeHtml(c.phone || "—")}</td>
+              <td>${escapeHtml(c.origem || "—")}</td>
+              <td><span class="pill-mini">${escapeHtml(c.fluxo || "—")}</span></td>
+              <td>${escapeHtml(formatHMS(Number(c.ageSec || 0)))}</td>
+              <td>
+                ${
+                  waLink
+                    ? `<button class="btn primary" type="button" onclick="window.open('${waLink}', '_blank')">
+                         <i class="ph ph-whatsapp-logo"></i> Chamar
+                       </button>`
+                    : `<button class="btn" type="button" onclick="showToast('Sem WhatsApp', 'Telefone inválido ou ausente', 'warn')">
+                         <i class="ph ph-phone-x"></i> Sem número
+                       </button>`
+                }
+              </td>
+            </tr>
+          `;
+        }).join("")}
       </tbody>
     </table>
   `;
 }
-    async function sendToComercial(leadId){
+async function sendToComercial(leadId){
   const sel = document.getElementById(`pv-to-${leadId}`);
   const noteEl = document.getElementById(`pv-note-${leadId}`);
 
@@ -261,6 +254,7 @@ const base = getPreVendasCards();
     showToast("Falta atendente", "Selecione quem vai receber no comercial", "warn");
     return;
   }
+
   if(!nota){
     showToast("Falta anotação", "Escreva o que o lead quer (contexto)", "warn");
     return;
@@ -280,12 +274,29 @@ const base = getPreVendasCards();
     const { error } = await sb.from("lead_handoffs").insert(payload);
     if(error) throw error;
 
-    // opcional: limpar campo
+    await addAuditLog({
+      actionType: "handoff_send",
+      entityType: "lead_handoff",
+      entityId: leadId,
+      description: "Lead encaminhado para atendente",
+      oldData: null,
+      newData: {
+        lead_id: leadId,
+        de_atendente_id: AUTH.atendenteId,
+        para_atendente_id: paraId,
+        nota,
+        status: "pendente"
+      },
+      metadata: {
+        origem_tela: "pvsend"
+      }
+    });
+
     if(noteEl) noteEl.value = "";
 
     showToast("Enviado ✅", "Pré-vendas → Comercial (pendente)", "success", 2400);
-
   }catch(err){
+    console.error("sendToComercial falhou:", err);
     showToast("Falha ao enviar", String(err.message || err), "error", 5200);
   }
 }
@@ -297,9 +308,6 @@ async function pvCreateLead(){
   const fluxo = (document.getElementById("pvFluxo")?.value || "Inicial").trim();
   const motivo = (document.getElementById("pvMotivo")?.value || "").trim();
 
-  // (opcional) escolher pra qual atendente vai — hoje você não está usando isso no create
-  // const paraAtendenteId = document.getElementById("pvParaAtendente")?.value || "";
-
   if(!nome){
     showToast("Nome obrigatório", "Digite o nome do lead", "warn");
     return;
@@ -308,8 +316,7 @@ async function pvCreateLead(){
   showToast("Cadastrando…", nome, "info", 1600);
 
   try{
-    // aqui o responsavel vira "—" (não atribuído) ou pode ser o próprio pré-vendas
-    const responsavelNome = "—"; // ou: (AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "—")
+    const responsavelNome = AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas";
 
     const created = await createLead({
       nome,
@@ -321,97 +328,45 @@ async function pvCreateLead(){
       createdRole: "prevendas"
     });
 
-    // limpa campos
-    ["pvNome","pvTelefone","pvMotivo"].forEach(id=>{
+    await addAuditLog({
+      actionType: "lead_create",
+      entityType: "lead",
+      entityId: created.id,
+      description: `Lead criado: ${nome}`,
+      oldData: null,
+      newData: {
+        nome,
+        telefone,
+        fluxo,
+        origem,
+        motivo
+      },
+      metadata: {
+        origem_tela: "pvcreate"
+      }
+    });
+
+    ["pvNome", "pvTelefone", "pvMotivo"].forEach(id => {
       const el = document.getElementById(id);
       if(el) el.value = "";
     });
 
-    // mantém selects como estão (origem/fluxo), se quiser limpar também, inclua ids acima
     await reload();
-    setView("prevendas");
-
+    setView("pvcreate");
     showToast("Lead criado ✅", `ID: ${created?.id ?? "—"}`, "success", 2400);
   }catch(err){
+    console.error("pvCreateLead falhou:", err);
     showToast("Falha ao criar", String(err?.message || err), "error", 5200);
   }
 }
-    function toggleView(){
-  const order = ["kanban","prevendas","dashboard","reports","settings"];
+function toggleView(){
+  const order = ["kanban","pvcreate","pvleads","pvsend","dashboard","reports","settings"];
   const idx = order.indexOf(VIEW);
   const next = order[(idx + 1) % order.length];
   setView(next);
 }
-    async function rejectHandoff(id){
-  const { error } = await sb
-    .from("lead_handoffs")
-    .update({
-      status: "recusado",
-      respondido_em: new Date().toISOString()
-    })
-    .eq("id", id);
 
-  if(error){
-    showToast("Erro ao recusar", error.message, "error");
-    return;
-  }
 
-  closeModal();
-  reload();
-}
-async function acceptHandoff(handoffId){
-  try{
-    const { data: h, error: e1 } = await sb
-      .from("lead_handoffs")
-      .select("id, lead_id, para_atendente_id, status")
-      .eq("id", handoffId)
-      .single();
-    if(e1) throw e1;
-
-    if(!h?.lead_id || !h?.para_atendente_id){
-      throw new Error("Handoff inválido (sem lead_id/para_atendente_id).");
-    }
-
-    const { data: at, error: e2 } = await sb
-      .from("atendentes")
-      .select("id, nome, manychat_name, auth_user_id") // ✅ Adicionado auth_user_id
-      .eq("id", h.para_atendente_id)
-      .single();
-    if(e2) throw e2;
-
-    const atendenteNome = (at?.manychat_name || at?.nome || "—").trim();
-    const now = new Date();
-    
-    const leadPayload = {
-      // ✅ UUID do banco + Texto do Kanban
-      responsavel_id: at.auth_user_id || at.id, 
-      "responsavel-id": atendenteNome,
-      
-      "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
-      "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
-    };
-
-    const { error: e3 } = await sb
-      .from(KANBAN.TABLE)
-      .update(leadPayload)
-      .eq("id", h.lead_id);
-    if(e3) throw e3;
-
-    const { error: e4 } = await sb
-      .from("lead_handoffs")
-      .update({ status: "aceito", respondido_em: new Date().toISOString() })
-      .eq("id", h.id);
-    if(e4) throw e4;
-
-    closeModal();
-    showToast("Aceito ✅", `Lead atribuído para ${atendenteNome}`, "success", 2600);
-    await reload();
-
-  }catch(err){
-    console.error("acceptHandoff falhou:", err);
-    showToast("Erro ao aceitar", String(err.message || err), "error", 5200);
-  }
-}
     /*********************** VIEW **************************************/
 // ==========================================
 // CONTROLE DO CABEÇALHO (MINIMIZAR)
@@ -436,62 +391,78 @@ function toggleTopbar() {
 // NAVEGAÇÃO DE TELAS (CORRIGIDA)
 // ==========================================
 async function setView(which) {
+  if (AUTH.isPreVendas) {
+    const allowed = ["pvcreate", "pvleads", "pvsend"];
+    if (!allowed.includes(which)) which = "pvcreate";
+  }
+
   VIEW = which;
 
-  const abas = ['board', 'prevendas', 'dashboard', 'reports', 'settings', 'unassigned', 'rejected', 'received'];
-  const botoes = ['navKanban', 'navPreVendas', 'navDash', 'navReports', 'navSettings', 'navUnassigned', 'navRejected', 'navReceived'];
+  const abas = [
+    'board', 'pvcreate', 'pvleads', 'pvsend',
+    'dashboard', 'reports', 'settings',
+    'unassigned', 'rejected', 'received'
+  ];
 
-  // Limpa visual de todos os botões do menu
+  const botoes = [
+    'navKanban', 'navPvCreate', 'navPvLeads', 'navPvSend',
+    'navDash', 'navReports', 'navSettings',
+    'navUnassigned', 'navRejected', 'navReceived'
+  ];
+
   botoes.forEach(id => document.getElementById(id)?.classList.remove('active'));
-
-  // Esconde todas as abas de uma vez
   abas.forEach(id => document.getElementById(id)?.classList.add('hidden'));
 
-  // Esconde ou exibe as métricas do topo (Aparece só no Kanban)
   const btnToggle = document.getElementById('btnToggleHeader');
   const kanbanTools = document.getElementById('kanbanTools');
-  
+
   if (which === 'kanban') {
     btnToggle?.classList.remove('hidden');
-    // Se o usuário não minimizou manualmente, exibe as ferramentas
     if (!TOPBAR_COLLAPSED && kanbanTools) kanbanTools.style.display = 'flex';
   } else {
     btnToggle?.classList.add('hidden');
     if (kanbanTools) kanbanTools.style.display = 'none';
   }
 
-  // Ativa a aba solicitada e carrega os dados dela
-  if (which === 'dashboard') {
+  if (which === 'pvcreate') {
+    document.getElementById('pvcreate')?.classList.remove('hidden');
+    document.getElementById('navPvCreate')?.classList.add('active');
+  }
+  else if (which === 'pvleads') {
+    document.getElementById('pvleads')?.classList.remove('hidden');
+    document.getElementById('navPvLeads')?.classList.add('active');
+    await renderPreVendas();
+  }
+else if (which === 'pvsend') {
+  document.getElementById('pvsend')?.classList.remove('hidden');
+  document.getElementById('navPvSend')?.classList.add('active');
+  await fillPvSendAtendentes();
+}
+  else if (which === 'dashboard') {
     document.getElementById('dashboard')?.classList.remove('hidden');
     document.getElementById('navDash')?.classList.add('active');
     renderDashboard();
-  } 
+  }
   else if (which === 'rejected') {
     document.getElementById('rejected')?.classList.remove('hidden');
     document.getElementById('navRejected')?.classList.add('active');
     renderRejected();
-  } 
+  }
   else if (which === 'received') {
     document.getElementById('received')?.classList.remove('hidden');
     document.getElementById('navReceived')?.classList.add('active');
     renderReceived();
-  } 
-  else if (which === 'prevendas') {
-    document.getElementById('prevendas')?.classList.remove('hidden');
-    document.getElementById('navPreVendas')?.classList.add('active');
-    try { await fillPvAtendentes(); } catch(e){ console.warn(e); }
-    await renderPreVendas();
-  } 
+  }
   else if (which === 'reports') {
     document.getElementById('reports')?.classList.remove('hidden');
     document.getElementById('navReports')?.classList.add('active');
     renderReports();
-  } 
+  }
   else if (which === 'settings') {
     document.getElementById('settings')?.classList.remove('hidden');
     document.getElementById('navSettings')?.classList.add('active');
     syncSettingsUI();
-  } 
+  }
   else if (which === 'unassigned') {
     if(!AUTH.isAdmin){
       showToast("Acesso negado", "Apenas admin", "error");
@@ -500,14 +471,90 @@ async function setView(which) {
     document.getElementById('unassigned')?.classList.remove('hidden');
     document.getElementById('navUnassigned')?.classList.add('active');
     renderUnassigned();
-  } 
+  }
   else {
-    // PADRÃO: Kanban
     document.getElementById('board')?.classList.remove('hidden');
     document.getElementById('navKanban')?.classList.add('active');
     renderBoard();
   }
-}   
+}
+
+let PV_SEND = { search: "", stage: "" };
+
+function getPvSendCards() {
+  return (STATE.cards || []).filter(c => {
+    const fluxo = String(c.fluxo || "").trim().toLowerCase();
+    return fluxo !== "parabéns";
+  });
+}
+
+async function renderPvSend() {
+  const wrap = document.getElementById("pvSendWrap");
+  const countEl = document.getElementById("pvSendCount");
+  if (!wrap) return;
+
+  const comercial = await loadAtendentesComercial();
+  const cards = getPvSendCards()
+    .filter(c => !PV_SEND.stage || String(c.fluxo) === String(PV_SEND.stage))
+    .filter(c => {
+      if (!PV_SEND.search) return true;
+      const hay = `${c.name || ""} ${c.phone || ""} ${c.origem || ""} ${c.fluxo || ""}`.toLowerCase();
+      return hay.includes(PV_SEND.search);
+    })
+    .sort((a, b) => b.sortTs - a.sortTs);
+
+  if (countEl) countEl.textContent = String(cards.length);
+
+  if (!cards.length) {
+    wrap.innerHTML = `<div style="color:var(--muted); font-weight:900;">Nenhum lead disponível para encaminhamento 🎯</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Lead</th>
+          <th>Telefone</th>
+          <th>Etapa</th>
+          <th>Enviar para</th>
+          <th>Anotação</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cards.map(c => `
+          <tr>
+            <td>
+              <b>${escapeHtml(c.name)}</b>
+              <div style="color:var(--muted); font-size:12px;">ID: ${escapeHtml(String(c.id))}</div>
+            </td>
+            <td>${escapeHtml(c.phone || "—")}</td>
+            <td><span class="pill-mini">${escapeHtml(c.fluxo || "—")}</span></td>
+            <td>
+              <select class="input" style="width:220px" id="pv-to-${c.id}">
+                <option value="">Selecionar atendente…</option>
+                ${comercial.map(a => `
+                  <option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>
+                `).join("")}
+              </select>
+            </td>
+            <td>
+              <input class="input" style="width:320px"
+                     id="pv-note-${c.id}"
+                     placeholder="O que o lead quer? Contexto, urgência, perfil…" />
+            </td>
+            <td>
+              <button class="btn primary" type="button" onclick="sendToComercial('${c.id}')">
+                <i class="ph ph-paper-plane-tilt"></i> Enviar
+              </button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
     /*********************** LISTENERS *********************************/
     function setupListeners(){
       document.getElementById('search')?.addEventListener('input', (e) => {
@@ -580,13 +627,10 @@ async function reload(){
   if(res && res.error){
     showError(res.error);
     return;
-
   }
 
-  // ✅ primeiro seta o STATE com os dados do kanban
   STATE = res || STATE;
 
-  // ✅ depois carrega atendentes (e não perde mais)
   if (AUTH.isAdmin) {
     try {
       STATE.atendentes = await loadAtendentes();
@@ -595,18 +639,23 @@ async function reload(){
       STATE.atendentes = [];
     }
   }
+
   await checkHandoffPopup();
   updateMetrics();
   populateFilters();
 
-  if(VIEW === "dashboard") renderDashboard();
-  else if(VIEW === "reports") renderReports();
-  else if(VIEW === "settings") syncSettingsUI();
-  else if(VIEW === "unassigned") renderUnassigned();
+  if (VIEW === "dashboard") renderDashboard();
+  else if (VIEW === "reports") renderReports();
+  else if (VIEW === "settings") syncSettingsUI();
+  else if (VIEW === "unassigned") renderUnassigned();
+  else if (VIEW === "rejected") renderRejected();
+  else if (VIEW === "received") renderReceived();
+  else if (VIEW === "pvleads") renderPreVendas();
+else if (VIEW === "pvsend") await fillPvSendAtendentes();
+  else if (VIEW === "pvcreate") setView("pvcreate");
   else renderBoard();
 
   startLiveTimers();
-  showToast("Atualizado", "Dados sincronizados com sucesso", "success", 2200);
 }
     async function loadHandoffsPendentes() {
   if (!AUTH.atendenteId) return [];
@@ -777,6 +826,390 @@ async function loadAtendentesComercial(){
         selO.value = cur;
       }
     }
+    function populateReportFlowOptions(){
+  const sel = document.getElementById("reportFlow");
+  if(!sel) return;
+
+  const fluxos = Array.from(
+    new Set((STATE.cards || []).map(c => c.fluxo).filter(Boolean))
+  ).sort();
+
+  const current = sel.value || "";
+
+  sel.innerHTML = `
+    <option value="">Todos os fluxos</option>
+    ${fluxos.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("")}
+  `;
+
+  sel.value = current;
+}
+/**************************RELATÓRIOS******************************************/
+function populateReportSellerOptions(){
+  const sel = document.getElementById("reportSeller");
+  if(!sel) return;
+
+  const vendedores = Array.from(
+    new Set(
+      (STATE.cards || [])
+        .map(c => c.responsavel)
+        .filter(v => v && v !== "—")
+    )
+  ).sort();
+
+  const current = sel.value || "";
+
+  sel.innerHTML = `
+    <option value="">Todos os vendedores</option>
+    ${vendedores.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("")}
+  `;
+
+  sel.value = current;
+}
+function parseBRDateToDate(value){
+  if(!value) return null;
+
+  if(value instanceof Date && !isNaN(value)) return value;
+
+  const s = String(value).trim();
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(!m) return null;
+
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return isNaN(d) ? null : d;
+}
+
+function isDateInPeriod(dateValue, period){
+  if(period === "all") return true;
+
+  const d = parseBRDateToDate(dateValue);
+  if(!d) return false;
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  const cmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if(period === "today"){
+    return cmp >= todayStart && cmp <= todayEnd;
+  }
+
+  if(period === "yesterday"){
+    const yStart = new Date(todayStart);
+    yStart.setDate(yStart.getDate() - 1);
+
+    const yEnd = new Date(todayEnd);
+    yEnd.setDate(yEnd.getDate() - 1);
+
+    return cmp >= yStart && cmp <= yEnd;
+  }
+
+  if(period === "7d"){
+    const start = new Date(todayStart);
+    start.setDate(start.getDate() - 6);
+    return cmp >= start && cmp <= todayEnd;
+  }
+
+  if(period === "30d"){
+    const start = new Date(todayStart);
+    start.setDate(start.getDate() - 29);
+    return cmp >= start && cmp <= todayEnd;
+  }
+
+  if(period === "month"){
+    const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    return cmp >= mStart && cmp <= mEnd;
+  }
+
+  return true;
+}
+function exportRows(rows, fileBaseName, format = "xlsx"){
+  const fileName = `${fileBaseName}-${new Date().toISOString().slice(0,10)}`;
+
+  if(!window.XLSX){
+    showToast("XLSX indisponível", "Biblioteca não carregou", "error", 5200);
+    return;
+  }
+
+  if(format === "csv"){
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${fileName}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
+  XLSX.writeFile(wb, `${fileName}.xlsx`);
+}
+function buildLeadsByFlowReportRows({
+  flow = "",
+  seller = "",
+  period = "all",
+  startDate = "",
+  endDate = ""
+} = {}){
+
+  return (STATE.cards || [])
+    .filter(c => !flow || c.fluxo === flow)
+    .filter(c => !seller || c.responsavel === seller)
+    .filter(c => {
+      if(period === "custom"){
+        return isBRDateWithinCustomRange(c.dataLead, startDate, endDate);
+      }
+      return isDateInPeriod(c.dataLead, period);
+    })
+    .map(c => ({
+      id: c.id,
+      data_lead: c.dataLead || "—",
+      hora_lead: c.horaLead || "—",
+      nome: c.name,
+      telefone: c.phone,
+      origem: c.origem,
+      responsavel: c.responsavel,
+      fluxo: c.fluxo,
+      motivo: c.motivo,
+      tempo_na_etapa: formatHMS(Number(c.ageSec || 0))
+    }));
+}
+function buildLeadsReportRows({
+  seller = "",
+  period = "all",
+  startDate = "",
+  endDate = ""
+} = {}){
+
+  return (STATE.cards || [])
+    .filter(c => !seller || c.responsavel === seller)
+    .filter(c => {
+      if(period === "custom"){
+        return isBRDateWithinCustomRange(c.dataLead, startDate, endDate);
+      }
+      return isDateInPeriod(c.dataLead, period);
+    })
+    .map(c => ({
+      id: c.id,
+      data_lead: c.dataLead || "—",
+      hora_lead: c.horaLead || "—",
+      nome: c.name,
+      telefone: c.phone,
+      origem: c.origem,
+      responsavel: c.responsavel,
+      fluxo: c.fluxo,
+      motivo: c.motivo,
+      tempo_na_etapa: formatHMS(Number(c.ageSec || 0))
+    }));
+}
+function buildConvertedReportRows({
+  seller = "",
+  period = "all",
+  startDate = "",
+  endDate = ""
+} = {}){
+  return (STATE.cards || [])
+    .filter(c => String(c.fluxo || "").toLowerCase() === "parabéns")
+    .filter(c => !seller || c.responsavel === seller)
+    .filter(c => {
+      if(period === "custom"){
+        return isBRDateWithinCustomRange(c.dataLead, startDate, endDate);
+      }
+      return isDateInPeriod(c.dataLead, period);
+    })
+    .map(c => ({
+      id: c.id,
+      data_lead: c.dataLead || "—",
+      hora_lead: c.horaLead || "—",
+      nome: c.name,
+      telefone: c.phone,
+      origem: c.origem,
+      responsavel: c.responsavel,
+      fluxo: c.fluxo,
+      motivo: c.motivo
+    }));
+}
+function buildOriginsSummaryRows(){
+  const map = {};
+
+  (STATE.cards || []).forEach(c => {
+    const origem = c.origem || "Sem origem";
+    if(!map[origem]) map[origem] = { total: 0, convertidos: 0 };
+
+    map[origem].total++;
+    if(String(c.fluxo || "").toLowerCase() === "parabéns"){
+      map[origem].convertidos++;
+    }
+  });
+
+  return Object.entries(map)
+    .map(([origem, st]) => ({
+      origem,
+      total_leads: st.total,
+      convertidos: st.convertidos,
+      conversao_pct: st.total ? Number(((st.convertidos / st.total) * 100).toFixed(2)) : 0
+    }))
+    .sort((a,b) => b.conversao_pct - a.conversao_pct);
+}
+async function buildHandoffsReportRows(){
+  const { data, error } = await sb
+    .from("lead_handoffs")
+    .select("id, lead_id, de_atendente_id, para_atendente_id, nota, status, created_at, respondido_em")
+    .order("created_at", { ascending: false });
+
+  if(error) throw error;
+
+  return (data || []).map(r => ({
+    id: r.id,
+    lead_id: r.lead_id,
+    de_atendente_id: r.de_atendente_id,
+    para_atendente_id: r.para_atendente_id,
+    nota: r.nota,
+    status: r.status,
+    criado_em: r.created_at,
+    respondido_em: r.respondido_em
+  }));
+}
+async function buildRejectedHandoffsReportRows(){
+  const { data, error } = await sb
+    .from("lead_handoffs")
+    .select("id, lead_id, de_atendente_id, para_atendente_id, nota, status, created_at, respondido_em")
+    .eq("status", "recusado")
+    .order("respondido_em", { ascending: false });
+
+  if(error) throw error;
+
+  return (data || []).map(r => ({
+    id: r.id,
+    lead_id: r.lead_id,
+    de_atendente_id: r.de_atendente_id,
+    para_atendente_id: r.para_atendente_id,
+    nota: r.nota,
+    status: r.status,
+    criado_em: r.created_at,
+    recusado_em: r.respondido_em
+  }));
+}async function buildAuditLogsReportRows(){
+  const { data, error } = await sb
+    .from("audit_logs")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if(error) throw error;
+
+  return (data || []).map(r => ({
+    id: r.id,
+    created_at: r.created_at,
+    actor_nome: r.actor_nome,
+    actor_email: r.actor_email,
+    action_type: r.action_type,
+    entity_type: r.entity_type,
+    entity_id: r.entity_id,
+    description: r.description,
+    old_data: JSON.stringify(r.old_data ?? {}),
+    new_data: JSON.stringify(r.new_data ?? {}),
+    metadata: JSON.stringify(r.metadata ?? {})
+  }));
+}
+async function generateReport(){
+  const type = document.getElementById("reportType")?.value || "leads_all";
+  const period = document.getElementById("reportPeriod")?.value || "all";
+  const seller = document.getElementById("reportSeller")?.value || "";
+  const flow = document.getElementById("reportFlow")?.value || "";
+  const startDate = document.getElementById("reportDateStart")?.value || "";
+  const endDate = document.getElementById("reportDateEnd")?.value || "";
+  const format = document.getElementById("reportFormat")?.value || "xlsx";
+
+  try{
+    showToast("Gerando relatório…", "Preparando dados", "info", 1800);
+
+    let rows = [];
+
+    if(type === "leads_all"){
+      rows = buildLeadsReportRows({ seller, period, startDate, endDate });
+    }
+    else if(type === "leads_by_seller"){
+      rows = buildLeadsReportRows({ seller, period, startDate, endDate });
+    }
+    else if(type === "leads_by_flow"){
+      if(!flow){
+        showToast("Selecione um fluxo", "Escolha qual fluxo deseja buscar", "warn");
+        return;
+      }
+      rows = buildLeadsByFlowReportRows({ flow, seller, period, startDate, endDate });
+    }
+    else if(type === "converted"){
+      rows = buildConvertedReportRows({ seller, period, startDate, endDate });
+    }
+    else if(type === "stopped"){
+      rows = buildStoppedReportRows({ seller, period, startDate, endDate });
+    }
+    else if(type === "origins"){
+      rows = buildOriginsSummaryRows();
+    }
+    else if(type === "handoffs"){
+      rows = await buildHandoffsReportRows();
+    }
+    else if(type === "rejected_handoffs"){
+      rows = await buildRejectedHandoffsReportRows();
+    }
+    else if(type === "audit_logs"){
+      rows = await buildAuditLogsReportRows();
+    }
+
+    if(!rows.length){
+      showToast("Sem dados", "Nenhum registro encontrado para esse filtro", "warn");
+      return;
+    }
+
+    exportRows(rows, `relatorio-${type}`, format);
+    showToast("Relatório gerado ✅", `${rows.length} registros exportados`, "success");
+  }catch(err){
+    console.error("generateReport falhou:", err);
+    showToast("Erro ao gerar relatório", String(err.message || err), "error", 5200);
+  }
+}
+function buildStoppedReportRows({
+  seller = "",
+  period = "all",
+  startDate = "",
+  endDate = ""
+} = {}){
+  const minStoppedSec = 3 * 24 * 60 * 60;
+
+  return (STATE.cards || [])
+    .filter(c => String(c.fluxo || "").toLowerCase() !== "parabéns")
+    .filter(c => Number(c.ageSec || 0) >= minStoppedSec)
+    .filter(c => !seller || c.responsavel === seller)
+    .filter(c => {
+      if(period === "custom"){
+        return isBRDateWithinCustomRange(c.dataLead, startDate, endDate);
+      }
+      return isDateInPeriod(c.dataLead, period);
+    })
+    .map(c => ({
+      id: c.id,
+      data_lead: c.dataLead || "—",
+      hora_lead: c.horaLead || "—",
+      nome: c.name,
+      telefone: c.phone,
+      origem: c.origem,
+      responsavel: c.responsavel,
+      fluxo: c.fluxo,
+      tempo_parado: formatHMS(Number(c.ageSec || 0)),
+      motivo: c.motivo
+    }));
+}
 
     /*********************** DATA LAYER ********************************/
 
@@ -844,9 +1277,15 @@ if (!AUTH.isAdmin) {
   }
 
   const uid = AUTH.session?.user?.id;
-  const myAtendenteId = AUTH.atendenteId; // atendentes.id
+  const myAtendenteId = AUTH.atendenteId;
 
-  q = q.or(`responsavel_id.eq.${myAtendenteId},created_by_auth.eq.${uid}`);
+  if (AUTH.isPreVendas) {
+    // Pré-vendas pode ver leads não concluídos.
+    // O filtro de 3 dias fica no renderPreVendas().
+    q = q.neq('fluxo-id', 'Parabéns');
+  } else {
+    q = q.or(`responsavel_id.eq.${myAtendenteId},created_by_auth.eq.${uid}`);
+  }
 }
 
 const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1);
@@ -892,23 +1331,25 @@ const { data, error } = await q.range(page * pageSize, (page + 1) * pageSize - 1
           if(resp !== '—' && resp !== '') responsaveisSet.add(resp);
           if(orig !== '—' && orig !== '') origensSet.add(orig);
 
-          cards.push({
-            id: row['id'],
-            name: safe_(row.nome, '(Sem nome)'),
-            phone: safe_(row.telefone, ''),
-            origem: orig,
-            responsavel: resp,
-            manychat: safe_(row['Manychat_id'], ''),
-            motivo: safe_(row['Motivo'], ''),
-            fluxo: stage,
-            horaLabel: formatHora_(horaEntrada),
-            stageTs: stageTs || 0,
-            sortTs: sortTs || 0,
-            ageSec,
-            created_by_auth: row.created_by_auth,
-created_by_atendente_id: row.created_by_atendente_id,
-created_by_role: row.created_by_role,
-          });
+cards.push({
+  id: row['id'],
+  name: safe_(row.nome, '(Sem nome)'),
+  phone: safe_(row.telefone, ''),
+  origem: orig,
+  responsavel: resp,
+  manychat: safe_(row['Manychat_id'], ''),
+  motivo: safe_(row['Motivo'], ''),
+  fluxo: stage,
+  dataLead: row["Data"] || null,
+  horaLead: horaEntrada || null,
+  horaLabel: formatHora_(horaEntrada),
+  stageTs: stageTs || 0,
+  sortTs: sortTs || 0,
+  ageSec,
+  created_by_auth: row.created_by_auth,
+  created_by_atendente_id: row.created_by_atendente_id,
+  created_by_role: row.created_by_role,
+});
         }
 
         const stageAverages = {};
@@ -934,9 +1375,43 @@ created_by_role: row.created_by_role,
         return { error: String(err.message || err) };
       }
     }
-    function getPreVendasCards(){
-  const uid = AUTH.session?.user?.id;
-  return (STATE.cards || []).filter(c => String(c.created_by_auth || "") === String(uid));
+
+
+function parseISODateInput(value){
+  if(!value) return null;
+  const d = new Date(value + "T00:00:00");
+  return isNaN(d) ? null : d;
+}
+
+
+function isBRDateWithinCustomRange(brDate, startValue, endValue){
+  const d = parseBRDateToDate(brDate);
+  if(!d) return false;
+
+  const start = parseISODateInput(startValue);
+  const end = parseISODateInput(endValue);
+
+  if(start && d < start) return false;
+
+  if(end){
+    const endDay = new Date(end);
+    endDay.setHours(23, 59, 59, 999);
+    if(d > endDay) return false;
+  }
+
+  return true;
+}
+    const THREE_DAYS_SEC = 3 * 24 * 60 * 60;
+function getPreVendasCards() {
+  return (STATE.cards || []).filter(c => {
+    const fluxo = String(c.fluxo || "").trim().toLowerCase();
+  
+    // ignora concluídos
+    if (fluxo === "parabéns") return false;
+
+    // lead parado há mais de 3 dias na etapa atual
+    return Number(c.ageSec || 0) >= THREE_DAYS_SEC;
+  });
 }
     async function fillAtendentesSelect(){
   const sel = document.getElementById("fResponsavel");
@@ -950,26 +1425,7 @@ created_by_role: row.created_by_role,
     return `<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`;
   }).join("");
 }
-async function fillPvAtendentes(){
-  const sel = document.getElementById("pvParaAtendente");
-  if(!sel) return;
-
-  sel.innerHTML = `<option value="">Carregando...</option>`;
-
-  try{
-    const comercial = await loadAtendentesComercial();
-    console.log("ATENDENTES COMERCIAL:", comercial);
-
-    sel.innerHTML =
-      `<option value="">Selecionar atendente…</option>` +
-      comercial.map(a => `<option value="${escapeHtml(String(a.id))}">${escapeHtml(a.nome)}</option>`).join("");
-
-  }catch(err){
-    console.error("fillPvAtendentes falhou:", err);
-    sel.innerHTML = `<option value="">Erro ao carregar atendentes</option>`;
-    showToast("Erro", "Não carregou atendentes do comercial", "error", 5000);
-  }
-}
+ 
     
 
     async function updateCardStage(id, newStage){
@@ -989,6 +1445,15 @@ async function fillPvAtendentes(){
 
       if(error) throw error;
       return { ok:true };
+      await addAuditLog({
+  actionType: "lead_stage_change",
+  entityType: "lead",
+  entityId: card.id,
+  description: `Lead movido de ${oldStage} para ${newStage}`,
+  oldData: { fluxo: oldStage },
+  newData: { fluxo: newStage },
+  metadata: { origem_tela: "kanban_drag_drop" }
+});
     }
     
 
@@ -1294,6 +1759,16 @@ function setupPreVendasListeners(){
     PV.stage = e.target.value || "";
     renderPreVendas();
   });
+
+  document.getElementById("pvSendSearch")?.addEventListener("input", (e)=>{
+    PV_SEND.search = (e.target.value || "").toLowerCase().trim();
+    renderPvSend();
+  });
+
+  document.getElementById("pvSendFilterStage")?.addEventListener("change", (e)=>{
+    PV_SEND.stage = e.target.value || "";
+    renderPvSend();
+  });
 }
     /*********************** UI RENDER: DASH ****************************/
     function renderDashboard(){
@@ -1440,46 +1915,53 @@ function setupPreVendasListeners(){
     }
 
     /*********************** REPORTS (NOVA ABA) *************************/
-    function renderReports(){
-      const repWrap = document.getElementById("repTableWrap");
-      const oriWrap = document.getElementById("originTableWrap");
-      const auditBox = document.getElementById("auditBox");
-      if(!repWrap || !oriWrap || !auditBox) return;
+ 
+function renderReports(){
+  const repWrap = document.getElementById("repTableWrap");
+  const oriWrap = document.getElementById("originTableWrap");
+  const auditBox = document.getElementById("auditBox");
 
-      const M = computeMetrics();
+  if(!repWrap || !oriWrap || !auditBox) return;
 
-      // tabelas
-      repWrap.innerHTML = buildTable_(
-        ["Vendedor","Total","Ativos","Compras","Conv.%"],
-        M.repsRank.slice(0, 12).map(r => [r.rep, r.total, r.active, r.won, r.conv.toFixed(1)])
-      );
+  populateReportSellerOptions();
+  populateReportFlowOptions();
 
-      oriWrap.innerHTML = buildTable_(
-        ["Origem","Total","Compras","Conv.%"],
-        M.originRank.slice(0, 12).map(o => [o.orig, o.total, o.won, o.conv.toFixed(1)])
-      );
+  const M = computeMetrics();
 
-      // auditoria rápida (ex.: sem responsável, sem origem, sem telefone)
-      const cards = (STATE.cards || []);
-      const noResp = cards.filter(c => !c.responsavel || c.responsavel === '—').length;
-      const noOrig = cards.filter(c => !c.origem || c.origem === '—').length;
-      const noPhone = cards.filter(c => !String(c.phone || '').replace(/\D/g,'')).length;
+  repWrap.innerHTML = buildTable_(
+    ["Vendedor","Total","Ativos","Compras","Conv.%"],
+    M.repsRank.slice(0, 12).map(r => [r.rep, r.total, r.active, r.won, r.conv.toFixed(1)])
+  );
 
-      auditBox.innerHTML = `
-        <div style="display:grid; gap:8px;">
-          <div><i class="ph ph-user-minus"></i> Sem responsável: <b>${noResp}</b></div>
-          <div><i class="ph ph-map-pin-line"></i> Sem origem: <b>${noOrig}</b></div>
-          <div><i class="ph ph-phone-x"></i> Sem telefone: <b>${noPhone}</b></div>
-        </div>
-      `;
-    }
+  oriWrap.innerHTML = buildTable_(
+    ["Origem","Total","Compras","Conv.%"],
+    M.originRank.slice(0, 12).map(o => [o.orig, o.total, o.won, o.conv.toFixed(1)])
+  );
 
+  const cards = (STATE.cards || []);
+  const noResp = cards.filter(c => !c.responsavel || c.responsavel === '—').length;
+  const noOrig = cards.filter(c => !c.origem || c.origem === '—').length;
+  const noPhone = cards.filter(c => !String(c.phone || '').replace(/\D/g,'')).length;
+
+  auditBox.innerHTML = `
+    <div style="display:grid; gap:8px;">
+      <div><i class="ph ph-user-minus"></i> Sem responsável: <b>${noResp}</b></div>
+      <div><i class="ph ph-map-pin-line"></i> Sem origem: <b>${noOrig}</b></div>
+      <div><i class="ph ph-phone-x"></i> Sem telefone: <b>${noPhone}</b></div>
+    </div>
+  `;
+}
     function buildTable_(headers, rows){
       const thead = `<tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr>`;
       const tbody = rows.map(r=>`<tr>${r.map(c=>`<td>${escapeHtml(String(c))}</td>`).join("")}</tr>`).join("");
       return `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
     }
-    function openCreateLead(){
+function openCreateLead(){
+  if (AUTH.isPreVendas && VIEW !== "pvcreate") {
+    showToast("Acesso limitado", "Pré-vendas só pode cadastrar leads na aba de cadastro", "warn");
+    return;
+  }
+
   fillAtendentesSelect();
   MODAL.open = true;
   MODAL.mode = "create";
@@ -1503,7 +1985,7 @@ function setupPreVendasListeners(){
 
   modalTitle.textContent = "Novo Lead";
   modalSub.textContent = "Preencha os dados e clique em Salvar";
-    
+
   fNome.value = "";
   fTelefone.value = "";
   fFluxo.value = "Inicial";
@@ -1511,7 +1993,6 @@ function setupPreVendasListeners(){
   fOrig.value = "";
   fMotivo.value = "";
 
-  // WhatsApp não faz sentido no “novo”
   const waBtn = document.getElementById('waBtn');
   if(waBtn) waBtn.classList.add('hidden');
 
@@ -1657,6 +2138,116 @@ function openHandoffModal(handoff) {
   overlay.classList.remove("hidden");
 }
 
+async function fillPvSendAtendentes(){
+  const sel = document.getElementById("pvSendPara");
+  if(!sel) return;
+
+  try{
+    const comercial = await loadAtendentesComercial();
+
+    sel.innerHTML = `
+      <option value="">Selecionar atendente…</option>
+      ${comercial.map(a => `
+        <option value="${escapeHtml(String(a.id))}">
+          ${escapeHtml(a.manychat_name || a.nome || "Atendente")}
+        </option>
+      `).join("")}
+    `;
+  }catch(err){
+    console.error("Erro ao carregar atendentes do pvsend:", err);
+    sel.innerHTML = `<option value="">Erro ao carregar atendentes</option>`;
+  }
+}
+
+function clearPvSendForm(){
+  const ids = [
+    "pvSendNome",
+    "pvSendTelefone",
+    "pvSendNota"
+  ];
+
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = "";
+  });
+
+  const fluxo = document.getElementById("pvSendFluxo");
+  const origem = document.getElementById("pvSendOrigem");
+  const para = document.getElementById("pvSendPara");
+
+  if(fluxo) fluxo.value = "Inicial";
+  if(origem) origem.value = "META";
+  if(para) para.value = "";
+}
+
+async function pvCreateAndSendLead(){
+  const nome = (document.getElementById("pvSendNome")?.value || "").trim();
+  const telefone = (document.getElementById("pvSendTelefone")?.value || "").trim();
+  const origem = (document.getElementById("pvSendOrigem")?.value || "").trim();
+  const fluxo = (document.getElementById("pvSendFluxo")?.value || "Inicial").trim();
+  const paraAtendenteId = (document.getElementById("pvSendPara")?.value || "").trim();
+  const nota = (document.getElementById("pvSendNota")?.value || "").trim();
+
+  if(!nome){
+    showToast("Nome obrigatório", "Digite o nome do lead", "warn");
+    return;
+  }
+
+  if(!paraAtendenteId){
+    showToast("Falta atendente", "Selecione quem vai receber o lead", "warn");
+    return;
+  }
+
+  if(!nota){
+    showToast("Falta anotação", "Escreva o contexto do lead", "warn");
+    return;
+  }
+
+  showToast("Criando e encaminhando…", nome, "info", 1800);
+
+  try{
+    const responsavelNome = AUTH.atendente?.manychat_name || AUTH.atendente?.nome || "Pré-vendas";
+
+    // 1) cria o lead
+    const created = await createLead({
+      nome,
+      telefone,
+      fluxo,
+      responsavel: responsavelNome,
+      origem: origem || "—",
+      motivo: nota,
+      createdRole: "prevendas"
+    });
+
+    if(!created?.id){
+      throw new Error("Lead criado sem ID retornado.");
+    }
+
+    // 2) cria o handoff
+    const handoffPayload = {
+      lead_id: created.id,
+      de_atendente_id: AUTH.atendenteId,
+      para_atendente_id: paraAtendenteId,
+      nota: nota,
+      status: "pendente"
+    };
+
+    const { error: handoffError } = await sb
+      .from("lead_handoffs")
+      .insert(handoffPayload);
+
+    if(handoffError) throw handoffError;
+
+    clearPvSendForm();
+    await reload();
+    await fillPvSendAtendentes();
+
+    showToast("Lead criado e encaminhado ✅", `ID: ${created.id}`, "success", 2800);
+  }catch(err){
+    console.error("pvCreateAndSendLead falhou:", err);
+    showToast("Falha ao encaminhar", String(err.message || err), "error", 5200);
+  }
+}
 // NOVA FUNÇÃO CONTROLADORA: Ela pega o ID e chama a função certa
 function handleHandoffAction(actionType) {
   const handoffId = document.getElementById("currentHandoffId").value;
@@ -1693,22 +2284,53 @@ function closeHandoffModal() {
 
 async function rejectHandoff(id){
   showToast("Recusando...", "Avisando o pré-vendas", "info", 1500);
-  const { error } = await sb
-    .from("lead_handoffs")
-    .update({
-      status: "recusado",
-      respondido_em: new Date().toISOString()
-    })
-    .eq("id", id);
 
-  if(error){
-    showToast("Erro ao recusar", error.message, "error");
-    return;
+  try{
+    const { data: current, error: readErr } = await sb
+      .from("lead_handoffs")
+      .select("id, status, lead_id, para_atendente_id")
+      .eq("id", id)
+      .single();
+
+    if(readErr) throw readErr;
+
+    const oldStatus = current?.status || "pendente";
+
+    const { error } = await sb
+      .from("lead_handoffs")
+      .update({
+        status: "recusado",
+        respondido_em: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if(error) throw error;
+
+    await addAuditLog({
+      actionType: "handoff_reject",
+      entityType: "lead_handoff",
+      entityId: id,
+      description: "Lead recusado pelo atendente",
+      oldData: {
+        status: oldStatus
+      },
+      newData: {
+        status: "recusado",
+        lead_id: current?.lead_id || null,
+        para_atendente_id: current?.para_atendente_id || null
+      },
+      metadata: {
+        origem_tela: "received"
+      }
+    });
+
+    closeHandoffModal();
+    showToast("Recusado", "O lead voltou para o pré-vendas", "warn");
+    await reload();
+  }catch(err){
+    console.error("rejectHandoff falhou:", err);
+    showToast("Erro ao recusar", String(err.message || err), "error");
   }
-
-  closeHandoffModal();
-  showToast("Recusado", "O lead voltou para o pré-vendas", "warn");
-  reload();
 }
 
 async function acceptHandoff(handoffId){
@@ -1720,28 +2342,59 @@ async function acceptHandoff(handoffId){
       .single();
     if(e1) throw e1;
 
+    const oldStatus = h.status;
+
     const { data: at, error: e2 } = await sb
       .from("atendentes")
-      .select("id, nome, manychat_name") 
+      .select("id, nome, manychat_name")
       .eq("id", h.para_atendente_id)
       .single();
     if(e2) throw e2;
 
     const atendenteNome = (at?.manychat_name || at?.nome || "—").trim();
     const now = new Date();
-    
+
     const leadPayload = {
-      responsavel_id: at.id, 
+      responsavel_id: at.id,
       "responsavel-id": atendenteNome,
       "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
       "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR"),
     };
 
-    const { error: e3 } = await sb.from(KANBAN.TABLE).update(leadPayload).eq("id", h.lead_id);
+    const { error: e3 } = await sb
+      .from(KANBAN.TABLE)
+      .update(leadPayload)
+      .eq("id", h.lead_id);
+
     if(e3) throw e3;
 
-    const { error: e4 } = await sb.from("lead_handoffs").update({ status: "aceito", respondido_em: new Date().toISOString() }).eq("id", h.id);
+    const { error: e4 } = await sb
+      .from("lead_handoffs")
+      .update({
+        status: "aceito",
+        respondido_em: new Date().toISOString()
+      })
+      .eq("id", h.id);
+
     if(e4) throw e4;
+
+    await addAuditLog({
+      actionType: "handoff_accept",
+      entityType: "lead_handoff",
+      entityId: h.id,
+      description: "Lead aceito pelo atendente",
+      oldData: {
+        status: oldStatus
+      },
+      newData: {
+        status: "aceito",
+        lead_id: h.lead_id,
+        para_atendente_id: h.para_atendente_id
+      },
+      metadata: {
+        origem_tela: "received"
+      }
+    });
 
     closeHandoffModal();
     showToast("Aceito ✅", `O lead agora é seu, ${atendenteNome}!`, "success", 3000);
@@ -1759,72 +2412,264 @@ async function acceptHandoff(handoffId){
 
 async function renderRejected() {
   const wrap = document.getElementById("rejectedWrap");
-  if(!wrap) return;
+  if (!wrap) return;
 
-  wrap.innerHTML = '<div style="padding:20px; color:var(--muted);"><i class="ph ph-spinner animate-spin"></i> Buscando recusas...</div>';
+  wrap.innerHTML = `
+    <div style="padding:20px; color:var(--muted); font-weight:900;">
+      <i class="ph ph-spinner-gap animate-spin"></i> Buscando leads recusados...
+    </div>
+  `;
 
   try {
-    let q = sb.from("lead_handoffs")
-      .select(`id, nota, respondido_em, status, lead_id, de_atendente_id, para_atendente_id`)
+    const { data: handoffs, error } = await sb
+      .from("lead_handoffs")
+      .select(`
+        id,
+        nota,
+        respondido_em,
+        status,
+        lead_id,
+        de_atendente_id,
+        para_atendente_id,
+        created_at
+      `)
       .eq("status", "recusado")
       .order("respondido_em", { ascending: false });
 
-    // Se não for admin, vê só os que ele mesmo enviou e foram recusados
-    if (!AUTH.isAdmin) {
-      q = q.eq("de_atendente_id", AUTH.atendenteId);
+    if (error) throw error;
+
+    if (!handoffs || handoffs.length === 0) {
+      wrap.innerHTML = `
+        <div style="color:var(--muted); font-weight:900; padding:20px;">
+          Nenhum lead recusado disponível no momento 🎉
+        </div>
+      `;
+      return;
     }
 
-    const { data: handoffs, error } = await q;
-    if(error) throw error;
+    const { data: atendentes, error: atErr } = await sb
+      .from("atendentes")
+      .select("id, nome, manychat_name");
 
-    if(!handoffs || handoffs.length === 0){
-       wrap.innerHTML = `<div style="color:var(--muted); font-weight:900; padding: 20px;">Nenhum lead recusado pendente. Que maravilha! 🎉</div>`;
-       return;
+    if (atErr) throw atErr;
+
+    const listaAtendentes = atendentes || [];
+
+    // =========================
+    // BUSCAR DADOS DOS LEADS
+    // =========================
+    const leadIds = [...new Set(handoffs.map(h => h.lead_id).filter(Boolean))];
+
+    let leadsMap = {};
+    if (leadIds.length) {
+      const { data: leadsData, error: leadErr } = await sb
+        .from(KANBAN.TABLE)
+        .select('id, nome, telefone, "fluxo-id"')
+        .in("id", leadIds);
+
+      if (leadErr) throw leadErr;
+
+      leadsMap = Object.fromEntries(
+        (leadsData || []).map(ld => [String(ld.id), ld])
+      );
     }
-
-    // Pega o nome dos atendentes para mostrar quem recusou
-    const atendentes = STATE.atendentes || [];
 
     let html = `
       <table>
         <thead>
           <tr>
-            <th>ID do Lead</th>
-            <th>Vendedor que recusou</th>
-            <th>Sua anotação original</th>
-            <th>Data da Recusa</th>
+            <th>Lead</th>
+            <th>Telefone</th>
+            <th>Etapa</th>
+            <th>Recusado por</th>
+            <th>Enviado por</th>
+            <th>Anotação</th>
+            <th>Data da recusa</th>
             <th>Ação</th>
           </tr>
         </thead>
         <tbody>
     `;
 
-    for(const h of handoffs) {
-       const recusador = atendentes.find(a => String(a.id) === String(h.para_atendente_id));
-       const nomeRecusador = recusador ? (recusador.manychat_name || recusador.nome) : "Vendedor Desconhecido";
-       const dataRecusa = h.respondido_em ? new Date(h.respondido_em).toLocaleString('pt-BR') : "—";
+    for (const h of handoffs) {
+      const recusador = listaAtendentes.find(a => String(a.id) === String(h.para_atendente_id));
+      const remetente = listaAtendentes.find(a => String(a.id) === String(h.de_atendente_id));
+      const lead = leadsMap[String(h.lead_id)] || null;
 
-       html += `
-         <tr>
-           <td><b>${escapeHtml(h.lead_id)}</b></td>
-           <td><span class="tag danger"><i class="ph ph-user-minus"></i> ${escapeHtml(nomeRecusador)}</span></td>
-           <td style="max-width:250px; white-space:normal;">"${escapeHtml(h.nota || '')}"</td>
-           <td>${dataRecusa}</td>
-           <td>
-             <button class="btn" onclick="openModal('${h.lead_id}')"><i class="ph ph-pencil"></i> Ver Lead</button>
-             <button class="btn ghost" onclick="dismissRejection('${h.id}')"><i class="ph ph-check"></i> Ciente (Arquivar)</button>
-           </td>
-         </tr>
-       `;
+      const nomeRecusador = recusador
+        ? (recusador.manychat_name || recusador.nome || "Vendedor")
+        : "Vendedor";
+
+      const nomeRemetente = remetente
+        ? (remetente.manychat_name || remetente.nome || "Pré-vendas")
+        : "Pré-vendas";
+
+      const nomeLead = lead?.nome || `Lead não encontrado`;
+      const telefoneLead = lead?.telefone || "—";
+      const fluxoLead = lead?.["fluxo-id"] || "—";
+
+      const dataRecusa = h.respondido_em
+        ? new Date(h.respondido_em).toLocaleString("pt-BR")
+        : "—";
+
+      html += `
+        <tr>
+          <td>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <b>${escapeHtml(nomeLead)}</b>
+              <span style="color:var(--muted); font-size:12px;">ID: ${escapeHtml(String(h.lead_id))}</span>
+            </div>
+          </td>
+
+          <td>${escapeHtml(telefoneLead)}</td>
+
+          <td>
+            <span class="pill-mini">${escapeHtml(fluxoLead)}</span>
+          </td>
+
+          <td>
+            <span class="tag danger">${escapeHtml(nomeRecusador)}</span>
+          </td>
+
+          <td>
+            <span class="tag">${escapeHtml(nomeRemetente)}</span>
+          </td>
+
+          <td style="max-width:280px; white-space:normal;">
+            ${escapeHtml(h.nota || "—")}
+          </td>
+
+          <td>
+            ${escapeHtml(dataRecusa)}
+          </td>
+
+          <td>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn" type="button" onclick="openModal('${h.lead_id}')">
+                <i class="ph ph-eye"></i> Ver lead
+              </button>
+              <button class="btn primary" type="button" onclick="claimRejectedLead('${h.id}', '${h.lead_id}')">
+                <i class="ph ph-hand-grabbing"></i> Pegar lead
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
     }
+
     html += `</tbody></table>`;
     wrap.innerHTML = html;
 
   } catch (err) {
-    wrap.innerHTML = `<div style="color:#fecaca;">Erro ao carregar: ${err.message}</div>`;
+    console.error("renderRejected falhou:", err);
+    wrap.innerHTML = `
+      <div style="color:#fecaca; padding:20px; font-weight:900;">
+        Erro ao carregar recusados: ${escapeHtml(err.message || String(err))}
+      </div>
+    `;
   }
 }
+async function claimRejectedLead(handoffId, leadId){
+  try{
+    if(!AUTH.atendenteId || !AUTH.atendente){
+      showToast("Erro", "Seu usuário não está vinculado a um atendente", "error");
+      return;
+    }
 
+    const atendenteNome = (AUTH.atendente.manychat_name || AUTH.atendente.nome || "—").trim();
+    const now = new Date();
+
+    const { data: handoffAtual, error: hReadErr } = await sb
+      .from("lead_handoffs")
+      .select("id, status, lead_id, para_atendente_id")
+      .eq("id", handoffId)
+      .single();
+
+    if(hReadErr) throw hReadErr;
+
+    if(!handoffAtual || handoffAtual.status !== "recusado"){
+      showToast("Indisponível", "Esse lead já foi pego por outra pessoa", "warn");
+      await renderRejected();
+      return;
+    }
+
+    const leadPayload = {
+      responsavel_id: AUTH.atendenteId,
+      "responsavel-id": atendenteNome,
+      "Data da mudança do fluxo": now.toLocaleDateString("pt-BR"),
+      "Hora da mudança do fluxo": now.toLocaleTimeString("pt-BR")
+    };
+
+    const { error: leadErr } = await sb
+      .from(KANBAN.TABLE)
+      .update(leadPayload)
+      .eq("id", leadId);
+
+    if(leadErr) throw leadErr;
+
+    const { data: updatedHandoff, error: handoffErr } = await sb
+      .from("lead_handoffs")
+      .update({
+        status: "aceito",
+        respondido_em: new Date().toISOString(),
+        para_atendente_id: AUTH.atendenteId
+      })
+      .eq("id", handoffId)
+      .eq("status", "recusado")
+      .select("id, status");
+
+    if(handoffErr) throw handoffErr;
+
+    if(!updatedHandoff || updatedHandoff.length === 0){
+      throw new Error("O handoff não foi atualizado. Verifique a policy RLS da tabela lead_handoffs.");
+    }
+
+    await addAuditLog({
+      actionType: "handoff_claim",
+      entityType: "lead_handoff",
+      entityId: handoffId,
+      description: `Lead recusado assumido por ${atendenteNome}`,
+      oldData: {
+        status: "recusado",
+        para_atendente_id: handoffAtual.para_atendente_id,
+        lead_id: handoffAtual.lead_id
+      },
+      newData: {
+        status: "aceito",
+        para_atendente_id: AUTH.atendenteId,
+        lead_id: leadId
+      },
+      metadata: {
+        origem_tela: "rejected"
+      }
+    });
+
+    const rowBtn = document.querySelector(`button[onclick="claimRejectedLead('${handoffId}', '${leadId}')"]`);
+    const row = rowBtn?.closest("tr");
+    if(row) row.remove();
+
+    const tbody = document.querySelector("#rejectedWrap table tbody");
+    if(tbody && !tbody.querySelector("tr")){
+      document.getElementById("rejectedWrap").innerHTML = `
+        <div style="color:var(--muted); font-weight:900; padding:20px;">
+          Nenhum lead recusado disponível no momento 🎉
+        </div>
+      `;
+    }
+
+    showToast("Lead pego ✅", `Agora ele está com ${atendenteNome}`, "success", 2600);
+
+    await reload();
+
+    if(VIEW === "rejected"){
+      await renderRejected();
+    }
+
+  }catch(err){
+    console.error("claimRejectedLead falhou:", err);
+    showToast("Erro ao pegar lead", String(err.message || err), "error", 5200);
+  }
+}
 async function dismissRejection(handoffId) {
   try {
     const { error } = await sb.from("lead_handoffs").update({ status: 'recusado_ciente' }).eq('id', handoffId);
@@ -1904,13 +2749,12 @@ async function saveModal(){
   const telefone = (fTelefone.value || "").trim();
   const fluxo = (fFluxo.value || "Inicial").trim();
 
-const newFields = {
-  responsavel: (fResp.value || '').trim() || '—',
-  origem: (fOrig.value || '').trim() || '—',
-  motivo: (fMotivo.value || '').trim()
-};
+  const newFields = {
+    responsavel: (fResp.value || '').trim() || '—',
+    origem: (fOrig.value || '').trim() || '—',
+    motivo: (fMotivo.value || '').trim()
+  };
 
-  // ===== MODO CRIAR =====
   if(MODAL.mode === "create"){
     if(!nome){
       showToast("Nome obrigatório", "Digite o nome do lead", "warn");
@@ -1921,15 +2765,34 @@ const newFields = {
     showToast("Criando…", nome, "info", 1800);
 
     try{
-const created = await createLead({
-  nome,
-  telefone,
-  fluxo,
-  responsavel: newFields.responsavel,
-  origem: newFields.origem,
-  motivo: newFields.motivo,
-  createdRole: "prevendas"
-});
+      const created = await createLead({
+        nome,
+        telefone,
+        fluxo,
+        responsavel: newFields.responsavel,
+        origem: newFields.origem,
+        motivo: newFields.motivo,
+        createdRole: "prevendas"
+      });
+
+      await addAuditLog({
+        actionType: "lead_create",
+        entityType: "lead",
+        entityId: created.id,
+        description: `Lead criado: ${nome}`,
+        oldData: null,
+        newData: {
+          nome,
+          telefone,
+          fluxo,
+          responsavel: newFields.responsavel,
+          origem: newFields.origem,
+          motivo: newFields.motivo
+        },
+        metadata: {
+          origem_tela: "modal_create"
+        }
+      });
 
       STATE.cards.unshift({
         id: created.id,
@@ -1954,18 +2817,25 @@ const created = await createLead({
 
       showToast("Lead criado", nome, "success", 2400);
     }catch(err){
+      console.error("saveModal create falhou:", err);
       showToast("Falha ao criar", String(err.message || err), "error", 5200);
     }
     return;
   }
 
-  // ===== MODO EDITAR =====
   if(!MODAL.card) return;
 
   const card = MODAL.card;
-  const old = { responsavel: card.responsavel, origem: card.origem, motivo: card.motivo };
 
-  // atualiza local (otimista)
+  const old = {
+    nome: card.name,
+    telefone: card.phone,
+    fluxo: card.fluxo,
+    responsavel: card.responsavel,
+    origem: card.origem,
+    motivo: card.motivo
+  };
+
   card.name = nome;
   card.phone = telefone;
   card.fluxo = fluxo;
@@ -1981,18 +2851,40 @@ const created = await createLead({
   showToast("Salvando…", card.name, "info", 1800);
 
   try{
-    // atualiza campos + fluxo (se quiser)
     await updateCardFields(card.id, newFields);
     await updateCardStage(card.id, fluxo);
     await updateLeadCore(card.id, { nome, telefone, fluxo });
 
+    await addAuditLog({
+      actionType: "lead_update",
+      entityType: "lead",
+      entityId: card.id,
+      description: `Lead atualizado: ${nome}`,
+      oldData: old,
+      newData: {
+        nome,
+        telefone,
+        fluxo,
+        responsavel: newFields.responsavel,
+        origem: newFields.origem,
+        motivo: newFields.motivo
+      },
+      metadata: {
+        origem_tela: "modal_edit"
+      }
+    });
+
     showToast("Atualizado", "Dados do lead salvos", "success", 2200);
     populateFilters();
   }catch(err){
-    // rollback
+    card.name = old.nome;
+    card.phone = old.telefone;
+    card.fluxo = old.fluxo;
     card.responsavel = old.responsavel;
     card.origem = old.origem;
     card.motivo = old.motivo;
+
+    console.error("saveModal edit falhou:", err);
     showToast("Falha ao salvar", String(err.message || err), "error", 5200);
   }
 }
@@ -2053,9 +2945,13 @@ const created = await createLead({
       setAutoRefresh(Boolean(auto?.checked));
       updateMetrics();
 
-      if(VIEW === "dashboard") renderDashboard();
-      if(VIEW === "reports") renderReports();
-      if(VIEW === "kanban") renderBoard();
+if (VIEW === "dashboard") renderDashboard();
+else if (VIEW === "reports") renderReports();
+else if (VIEW === "settings") syncSettingsUI();
+else if (VIEW === "unassigned") renderUnassigned();
+else if (VIEW === "pvleads") renderPreVendas();
+else if (VIEW === "pvcreate") setView("pvcreate");
+else renderBoard();
 
       showToast("Resetado", "Voltou para o padrão", "info", 2600);
     }
@@ -2126,7 +3022,27 @@ const created = await createLead({
              String(Math.floor((sec%3600)/60)).padStart(2,'0') + ':' +
              String(sec%60).padStart(2,'0');
     }
+function applyRoleUI() {
+  const isPv = AUTH.isPreVendas;
 
+  document.getElementById("navKanban")?.classList.toggle("hidden", isPv);
+  document.getElementById("navDash")?.classList.toggle("hidden", isPv);
+  document.getElementById("navUnassigned")?.classList.add("hidden");
+  document.getElementById("navRejected")?.classList.toggle("hidden", isPv);
+  document.getElementById("navReceived")?.classList.toggle("hidden", isPv);
+  document.getElementById("navReports")?.classList.toggle("hidden", isPv);
+  document.getElementById("navSettings")?.classList.toggle("hidden", isPv);
+
+  document.getElementById("navPvCreate")?.classList.toggle("hidden", !isPv);
+  document.getElementById("navPvLeads")?.classList.toggle("hidden", !isPv);
+  document.getElementById("navPvSend")?.classList.toggle("hidden", !isPv);
+
+  document.getElementById("kanbanTools")?.classList.toggle("hidden", isPv);
+
+  if (isPv) {
+    VIEW = "pvcreate";
+  }
+}
     function escapeHtml(s){
       return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     }
@@ -2137,6 +3053,36 @@ const created = await createLead({
       if(s.length <= 11) s = '55' + s;
       return 'https://wa.me/' + s + '?text=Ol%C3%A1!%20Vi%20seu%20cadastro%20%F0%9F%99%82';
     }
+
+    function buildLeadsByFlowReportRows({
+  flow = "",
+  seller = "",
+  period = "all",
+  startDate = "",
+  endDate = ""
+} = {}){
+  return (STATE.cards || [])
+    .filter(c => !flow || c.fluxo === flow)
+    .filter(c => !seller || c.responsavel === seller)
+    .filter(c => {
+      if(period === "custom"){
+        return isBRDateWithinCustomRange(c.dataLead, startDate, endDate);
+      }
+      return isDateInPeriod(c.dataLead, period);
+    })
+    .map(c => ({
+      id: c.id,
+      data_lead: c.dataLead || "—",
+      hora_lead: c.horaLead || "—",
+      nome: c.name,
+      telefone: c.phone,
+      origem: c.origem,
+      responsavel: c.responsavel,
+      fluxo: c.fluxo,
+      motivo: c.motivo,
+      tempo_na_etapa: formatHMS(Number(c.ageSec || 0))
+    }));
+}
 
     /*********************** METRICS + EXPORT **************************/
     function isWon_(card){
@@ -2352,6 +3298,39 @@ const created = await createLead({
       showToast("Leads exportados", "Arquivo XLSX gerado", "success");
     }
 
+    async function addAuditLog({
+  actionType,
+  entityType,
+  entityId = null,
+  description = "",
+  oldData = null,
+  newData = null,
+  metadata = null
+}) {
+  try {
+    const payload = {
+      actor_auth_user_id: AUTH.session?.user?.id || null,
+      actor_atendente_id: AUTH.atendenteId || null,
+      actor_nome: AUTH.atendente?.manychat_name || AUTH.atendente?.nome || null,
+      actor_email: AUTH.session?.user?.email || null,
+
+      action_type: actionType,
+      entity_type: entityType,
+      entity_id: entityId ? String(entityId) : null,
+
+      description: description || null,
+      old_data: oldData || null,
+      new_data: newData || null,
+      metadata: metadata || null
+    };
+
+    const { error } = await sb.from("audit_logs").insert(payload);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Falha ao gravar audit log:", err);
+  }
+}
+
 // ===== EXPOSE FUNCTIONS TO HTML (onclick / ondrop etc) =====
 window.sendToComercial = sendToComercial;
 window.pvCreateLead = pvCreateLead;
@@ -2402,3 +3381,8 @@ window.renderRejected = renderRejected;
 window.renderReceived = renderReceived;
 window.postponeHandoff = postponeHandoff;
 window.toggleTopbar = toggleTopbar;
+window.claimRejectedLead = claimRejectedLead;
+window.renderPvSend = renderPvSend;
+window.pvCreateAndSendLead = pvCreateAndSendLead;
+window.clearPvSendForm = clearPvSendForm;
+window.generateReport = generateReport;
