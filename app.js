@@ -381,7 +381,8 @@ function toggleView(){
 const SELLER_GOALS = {
   "Bruna": 30,
   "Victoria": 25,
-  "Heloisa": 20
+  "Heloisa": 20,
+  "Marina": 0
 };
 
 
