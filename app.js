@@ -1,5 +1,4 @@
-
-    /*********************** GLOBAL ERROR CAPTURE **********************/
+  /*********************** GLOBAL ERROR CAPTURE **********************/
     // Mantém o design e evita "tela vermelha total" sem contexto.
  window.onerror = function(msg, url, line, col, err) {
   try {
@@ -66,7 +65,7 @@ if (!window.supabase || !window.supabase.createClient) {
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     /*********************** KANBAN CONFIG *****************************/
-const KANBAN = {
+ const KANBAN = {
   TABLE: "Leads-Geral1",
   STAGES: [
     'Inicial',
@@ -77,11 +76,11 @@ const KANBAN = {
     'A04',
     'Recall A04',
     'Link-Enviado',
-    'Inativos',
     'Parabéns'
   ],
   SLA: { warnMin: 30, dangerMin: 60 }
 };
+
     /*********************** CHART GLOBALS *****************************/
     Chart.defaults.color = '#9aa7b4';
     Chart.defaults.borderColor = 'rgba(255,255,255,0.10)';
@@ -298,47 +297,6 @@ async function sendToComercial(leadId){
         origem_tela: "pvsend"
       }
     });
-
-    async function autoMoveInactiveLeads() {
-  const THREE_DAYS_SEC = 3 * 24 * 60 * 60;
-
-  const candidates = (STATE.cards || []).filter(card => {
-    const fluxo = String(card.fluxo || "").trim().toLowerCase();
-
-    // não mexe em concluídos nem em já inativos
-    if (fluxo === "parabéns" || fluxo === "inativos") return false;
-
-    // passou de 3 dias parado na etapa atual
-    return Number(card.ageSec || 0) >= THREE_DAYS_SEC;
-  });
-
-  if (!candidates.length) return;
-
-  for (const card of candidates) {
-    try {
-      await updateCardStage(card.id, "Inativos");
-
-      await addAuditLog({
-        actionType: "lead_auto_inactive",
-        entityType: "lead",
-        entityId: card.id,
-        description: `Lead movido automaticamente para Inativos após mais de 3 dias parado`,
-        oldData: {
-          fluxo: card.fluxo
-        },
-        newData: {
-          fluxo: "Inativos"
-        },
-        metadata: {
-          origem_tela: "auto_rule",
-          ageSec: Number(card.ageSec || 0)
-        }
-      });
-    } catch (err) {
-      console.error(`Falha ao mover lead ${card.id} para Inativos:`, err);
-    }
-  }
-}
 
     if(noteEl) noteEl.value = "";
 
@@ -697,19 +655,7 @@ async function reload(){
     board.innerHTML = '<div style="padding:20px; color:var(--muted); font-size:14px; font-weight:900;"><i class="ph ph-hourglass-medium"></i> Sincronizando...</div>';
   }
 
-  let res = await getKanbanData();
-  if(res && res.error){
-    showError(res.error);
-    return;
-  }
-
-  STATE = res || STATE;
-
-  // move automaticamente leads parados há mais de 3 dias
-  await autoMoveInactiveLeads();
-
-  // recarrega após mover para refletir o estado atualizado
-  res = await getKanbanData();
+  const res = await getKanbanData();
   if(res && res.error){
     showError(res.error);
     return;
@@ -730,17 +676,17 @@ async function reload(){
   updateMetrics();
   populateFilters();
 
-  if (VIEW === "performance") renderPerformance();
-  else if (VIEW === "dashboard") renderDashboard();
-  else if (VIEW === "reports") renderReports();
-  else if (VIEW === "settings") syncSettingsUI();
-  else if (VIEW === "unassigned") renderUnassigned();
-  else if (VIEW === "rejected") renderRejected();
-  else if (VIEW === "received") renderReceived();
-  else if (VIEW === "pvleads") renderPreVendas();
-  else if (VIEW === "pvsend") await fillPvSendAtendentes();
-  else if (VIEW === "pvcreate") setView("pvcreate");
-  else renderBoard();
+if (VIEW === "performance") renderPerformance();
+else if (VIEW === "dashboard") renderDashboard();
+else if (VIEW === "reports") renderReports();
+else if (VIEW === "settings") syncSettingsUI();
+else if (VIEW === "unassigned") renderUnassigned();
+else if (VIEW === "rejected") renderRejected();
+else if (VIEW === "received") renderReceived();
+else if (VIEW === "pvleads") renderPreVendas();
+else if (VIEW === "pvsend") await fillPvSendAtendentes();
+else if (VIEW === "pvcreate") setView("pvcreate");
+else renderBoard();
 
   startLiveTimers();
 }
@@ -1275,10 +1221,7 @@ function buildStoppedReportRows({
   const minStoppedSec = 3 * 24 * 60 * 60;
 
   return (STATE.cards || [])
-    .filter(c => {
-  const fluxo = String(c.fluxo || "").toLowerCase();
-  return fluxo !== "parabéns" && fluxo !== "inativos";
-})
+    .filter(c => String(c.fluxo || "").toLowerCase() !== "parabéns")
     .filter(c => Number(c.ageSec || 0) >= minStoppedSec)
     .filter(c => !seller || c.responsavel === seller)
     .filter(c => {
@@ -1525,10 +1468,11 @@ function isBRDateWithinCustomRange(brDate, startValue, endValue){
 function getPreVendasCards() {
   return (STATE.cards || []).filter(c => {
     const fluxo = String(c.fluxo || "").trim().toLowerCase();
-
+  
+    // ignora concluídos
     if (fluxo === "parabéns") return false;
-    if (fluxo === "inativos") return false;
 
+    // lead parado há mais de 3 dias na etapa atual
     return Number(c.ageSec || 0) >= THREE_DAYS_SEC;
   });
 }
@@ -4105,114 +4049,6 @@ const stagesHtml = Object.entries(seller.stages)
     console.error("Falha ao gravar audit log:", err);
   }
 }
-
-
-async function autoMoveInactiveLeads() {
-  const THREE_DAYS_SEC = 3 * 24 * 60 * 60;
-
-  const candidates = (STATE.cards || []).filter(card => {
-    const fluxo = String(card.fluxo || "").trim().toLowerCase();
-
-    if (fluxo === "parabéns" || fluxo === "inativos") return false;
-
-    return Number(card.ageSec || 0) >= THREE_DAYS_SEC;
-  });
-
-  if (!candidates.length) return;
-
-  for (const card of candidates) {
-    try {
-      const { error } = await sb
-        .from(KANBAN.TABLE)
-        .update({
-          "fluxo_anterior_auto": card.fluxo,
-          "data_inativado_auto": new Date().toISOString(),
-          "fluxo-id": "Inativos",
-          "Data da mudança do fluxo": new Date().toLocaleDateString("pt-BR"),
-          "Hora da mudança do fluxo": new Date().toLocaleTimeString("pt-BR")
-        })
-        .eq("id", card.id);
-
-      if (error) throw error;
-
-      await addAuditLog({
-        actionType: "lead_auto_inactive",
-        entityType: "lead",
-        entityId: card.id,
-        description: "Lead movido automaticamente para Inativos",
-        oldData: {
-          fluxo: card.fluxo
-        },
-        newData: {
-          fluxo: "Inativos"
-        },
-        metadata: {
-          origem_tela: "auto_rule",
-          ageSec: Number(card.ageSec || 0)
-        }
-      });
-
-    } catch (err) {
-      console.error(`Falha ao mover lead ${card.id} para Inativos:`, err);
-    }
-  }
-}
-
-async function restoreInactiveLeads() {
-  try {
-    showToast("Restaurando...", "Voltando leads para o fluxo anterior salvo", "info", 2500);
-
-    const { data: leads, error } = await sb
-      .from(KANBAN.TABLE)
-      .select('id, "fluxo-id", fluxo_anterior_auto')
-      .eq("fluxo-id", "Inativos")
-      .not("fluxo_anterior_auto", "is", null);
-
-    if (error) throw error;
-
-    if (!leads || !leads.length) {
-      showToast("Nada para restaurar", "Nenhum lead com fluxo anterior salvo", "warn", 4000);
-      return;
-    }
-
-    let restored = 0;
-
-    for (const lead of leads) {
-      const fluxoAnterior = String(lead.fluxo_anterior_auto || "").trim();
-
-      if (!fluxoAnterior) continue;
-      if (!KANBAN.STAGES.includes(fluxoAnterior)) continue;
-
-      const { error: upErr } = await sb
-        .from(KANBAN.TABLE)
-        .update({
-          "fluxo-id": fluxoAnterior,
-          "fluxo_anterior_auto": null,
-          "data_inativado_auto": null,
-          "Data da mudança do fluxo": new Date().toLocaleDateString("pt-BR"),
-          "Hora da mudança do fluxo": new Date().toLocaleTimeString("pt-BR")
-        })
-        .eq("id", lead.id)
-        .eq("fluxo-id", "Inativos");
-
-      if (upErr) {
-        console.error(`Erro ao restaurar lead ${lead.id}:`, upErr);
-        continue;
-      }
-
-      restored++;
-    }
-
-    await reload();
-    showToast("Restauração concluída ✅", `${restored} leads restaurados`, "success", 5000);
-
-  } catch (err) {
-    console.error("restoreInactiveLeads falhou:", err);
-    showToast("Erro ao restaurar", String(err.message || err), "error", 6000);
-  }
-}
-
-window.restoreInactiveLeads = restoreInactiveLeads;
 
 // ===== EXPOSE FUNCTIONS TO HTML (onclick / ondrop etc) =====
 window.sendToComercial = sendToComercial;
