@@ -31,43 +31,51 @@
           <span>Kanban • Dashboard</span>
         </div>
       </div>
-
 <div class="nav">
-        <button id="navKanban" class="active" type="button" onclick="setView('kanban')">
-          <i class="ph ph-kanban"></i> Kanban
-        </button>
-        
-        <button id="navDash" type="button" onclick="setView('dashboard')">
-          <i class="ph ph-chart-bar"></i> Dashboard
-        </button>
-        <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
-          <i class="ph ph-user-plus"></i> Não atribuído
-        </button>
-<button id="navPvCreate" type="button" onclick="setView('pvcreate')">
-  <i class="ph ph-user-plus"></i> Cadastrar lead
-</button>
-<button id="navPvSend" type="button" onclick="setView('pvsend')">
-  <i class="ph ph-paper-plane-tilt"></i> Encaminhar lead
-</button>
+  <button id="navKanban" class="active" type="button" onclick="setView('kanban')">
+    <i class="ph ph-kanban"></i> Kanban
+  </button>
 
+  <button id="navPerformance" type="button" onclick="setView('performance')">
+    <i class="ph ph-user-circle-gear"></i> Desempenho
+  </button>
 
+  <button id="navDash" type="button" onclick="setView('dashboard')">
+    <i class="ph ph-chart-bar"></i> Dashboard
+  </button>
 
-<button id="navPvLeads" type="button" onclick="setView('pvleads')">
-  <i class="ph ph-list-bullets"></i> Leads inativos
-</button>
-        <button id="navRejected" type="button" onclick="setView('rejected')">
-          <i class="ph ph-x-circle"></i> Leads Recusados
-        </button>
-        <button id="navReceived" type="button" onclick="setView('received')">
-          <i class="ph ph-tray"></i> Caixa de Entrada
-        </button>
-        <button id="navReports" type="button" onclick="setView('reports')">
-          <i class="ph ph-file-text"></i> Relatórios
-        </button>
-        <button id="navSettings" type="button" onclick="setView('settings')">
-          <i class="ph ph-gear-six"></i> Configurações
-        </button>
-      </div>
+  <button id="navUnassigned" type="button" class="hidden" onclick="setView('unassigned')">
+    <i class="ph ph-user-plus"></i> Não atribuído
+  </button>
+
+  <button id="navPvCreate" type="button" onclick="setView('pvcreate')">
+    <i class="ph ph-user-plus"></i> Cadastrar lead
+  </button>
+
+  <button id="navPvSend" type="button" onclick="setView('pvsend')">
+    <i class="ph ph-paper-plane-tilt"></i> Encaminhar lead
+  </button>
+
+  <button id="navPvLeads" type="button" onclick="setView('pvleads')">
+    <i class="ph ph-list-bullets"></i> Leads inativos
+  </button>
+
+  <button id="navRejected" type="button" onclick="setView('rejected')">
+    <i class="ph ph-x-circle"></i> Leads Recusados
+  </button>
+
+  <button id="navReceived" type="button" onclick="setView('received')">
+    <i class="ph ph-tray"></i> Caixa de Entrada
+  </button>
+
+  <button id="navReports" type="button" onclick="setView('reports')">
+    <i class="ph ph-file-text"></i> Relatórios
+  </button>
+
+  <button id="navSettings" type="button" onclick="setView('settings')">
+    <i class="ph ph-gear-six"></i> Configurações
+  </button>
+</div>
 
       <div class="sidebar-bottom">
         <div class="userline">
@@ -88,9 +96,9 @@
         <div id="updatedAt" class="muted" style="margin:0;">Carregando...</div>
       </div>
 
-      <button id="btnToggleHeader" class="iconbtn kanban-only" type="button" onclick="toggleTopbar()" title="Minimizar Cabeçalho">
-        <i id="toggleIcon" class="ph ph-caret-up"></i>
-      </button>
+<button id="btnToggleHeader" class="iconbtn kanban-only" type="button" onclick="toggleTopbar()" title="Minimizar Cabeçalho">
+  <i id="toggleIcon" class="ph ph-caret-up"></i>
+</button>
     </div>
 
     <div id="kanbanTools" style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 14px;">
@@ -306,6 +314,26 @@
         <div id="unassignedWrap"></div>
       </div>
     </main>
+    <main id="performance" class="page hidden">
+  <div class="chart-card">
+    <div class="chart-title">
+      <div class="left">
+        <i class="ph ph-user-circle-gear"></i> Desempenho Individual por Vendedor
+      </div>
+      <button class="btn primary" type="button" onclick="renderPerformance()">
+        <i class="ph ph-arrows-clockwise"></i> Atualizar
+      </button>
+    </div>
+
+    <div style="margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap;">
+      <select id="performanceSellerFilter" class="input" style="width:260px;">
+        <option value="">Todos os vendedores</option>
+      </select>
+    </div>
+
+    <div id="performanceWrap"></div>
+  </div>
+</main>
         <main id="dashboard" class="dashboard hidden">
           <div class="chart-card">
             <div class="chart-title">
@@ -514,86 +542,144 @@
     </section>
   </div>
 
-  <div id="modalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-header">
-        <div>
-          <div id="modalTitle" class="modal-title">Lead</div>
-          <div id="modalSub" class="modal-sub">—</div>
-        </div>
-        <button class="iconbtn" type="button" onclick="closeModal()"><i class="ph ph-x"></i></button>
-      </div>
-      
-      <div class="modal-body">
-        <div class="field">
-          <label>Nome</label>
-          <input id="fNome" type="text" />
-        </div>
-
-        <div class="field">
-          <label>Telefone</label>
-          <input id="fTelefone" type="text" placeholder="(51) 99999-9999" />
-        </div>
-
-        <div class="field">
-          <label>Etapa (Fluxo)</label>
-   <select id="fFluxo" class="input" style="border-radius:14px; width: 100%;">
-  <option value="Inicial">Inicial</option>
-  <option value="A02">A02</option>
-  <option value="Recall A02">Recall A02</option>
-  <option value="A03">A03</option>
-  <option value="Recall A03">Recall A03</option>
-  <option value="A04">A04</option>
-  <option value="Recall A04">Recall A04</option>
-  <option value="Link-Enviado">Link-Enviado</option>
-  <option value="Parabéns">Parabéns</option>
-</select>
-        </div>
-
-        <div class="field">
-          <label>Atendente (Responsável)</label>
-          <select id="fResponsavel" class="input" style="border-radius:14px; width: 100%;">
-            <option value="">Selecionar atendente…</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Origem</label>
-          <select id="fOrigem" class="input" style="border-radius:14px; width: 100%;">
-            <option value="META">META</option>
-            <option value="Google">Google</option>
-            <option value="Bio/Instagram">Bio/Instagram</option>
-            <option value="Não identificado">Não identificado</option>
-            <option value="Formulário Elementor">Formulário Elementor</option>
-            <option value="DM/Instagram">DM/Instagram</option>
-            <option value="Outros">Outros</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Observação (Motivo)</label>
-          <textarea id="fMotivo" rows="4"></textarea>
-        </div>
+<div id="modalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div id="modalTitle" class="modal-title">Lead</div>
+        <div id="modalSub" class="modal-sub">—</div>
       </div>
 
-      <div class="modal-footer">
-        <div class="modal-left">
-          <a id="waBtn" class="wabtn" href="#" target="_blank" rel="noopener">
-            <i class="ph ph-whatsapp-logo"></i> WhatsApp
-          </a>
-        </div>
-        <div class="modal-right">
-          <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
-          <button class="btn danger" type="button" onclick="deleteFromModal()">
-            <i class="ph ph-trash"></i> Excluir
-          </button>
-          <button class="btn primary" type="button" onclick="saveModal()">
-            <i class="ph ph-floppy-disk"></i> Salvar
-          </button>
+      <button class="iconbtn" type="button" onclick="closeModal()" aria-label="Fechar modal">
+        <i class="ph ph-x"></i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="field">
+        <label>Nome</label>
+        <input id="fNome" type="text" />
+      </div>
+
+      <div class="field">
+        <label>Telefone</label>
+        <input id="fTelefone" type="text" placeholder="(51) 99999-9999" />
+      </div>
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+  <div class="field">
+    <label>Data de entrada</label>
+    <div class="info-box" id="fDataLead">—</div>
+  </div>
+
+  <div class="field">
+    <label>Hora de entrada</label>
+    <div class="info-box" id="fHoraLead">—</div>
+  </div>
+
+  <div class="field">
+    <label>Data mudança fluxo</label>
+    <div class="info-box" id="fDataMudancaFluxo">—</div>
+  </div>
+
+  <div class="field">
+    <label>Hora mudança fluxo</label>
+    <div class="info-box" id="fHoraMudancaFluxo">—</div>
+  </div>
+</div>
+      <div class="field">
+        <label>Etapa (Fluxo)</label>
+        <select id="fFluxo" class="input">
+          <option value="Inicial">Inicial</option>
+          <option value="A02">A02</option>
+          <option value="Recall A02">Recall A02</option>
+          <option value="A03">A03</option>
+          <option value="Recall A03">Recall A03</option>
+          <option value="A04">A04</option>
+          <option value="Recall A04">Recall A04</option>
+          <option value="Link-Enviado">Link-Enviado</option>
+          <option value="Parabéns">Parabéns</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Atendente (Responsável)</label>
+       <select id="fResponsavel" class="input">
+          <option value="">Selecionar atendente…</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Origem</label>
+        <select id="fOrigem" class="input" style="border-radius:14px; width:100%;">
+          <option value="META">META</option>
+          <option value="Google">Google</option>
+          <option value="Bio/Instagram">Bio/Instagram</option>
+          <option value="Não identificado">Não identificado</option>
+          <option value="Formulário Elementor">Formulário Elementor</option>
+          <option value="DM/Instagram">DM/Instagram</option>
+          <option value="Outros">Outros</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Observação (Motivo)</label>
+        <textarea id="fMotivo" rows="4"></textarea>
+      </div>
+
+      <div class="offer-accordion">
+        <button type="button" class="offer-toggle" onclick="toggleOfferSection()">
+          <div class="offer-toggle-left">
+            <span class="offer-dot"></span>
+            <span>Oferta</span>
+          </div>
+          <i id="offerToggleIcon" class="ph ph-caret-down"></i>
+        </button>
+
+        <div id="offerSectionBody" class="offer-body hidden">
+          <div class="oferta-section">
+            <div class="oferta-section-title">Oferta - Cursos</div>
+            <div id="ofertaCursosWrap" class="check-grid"></div>
+          </div>
+
+          <div class="oferta-section">
+            <div class="oferta-section-title">Oferta - Acessos</div>
+            <div id="ofertaAcessosWrap" class="check-grid"></div>
+          </div>
+
+          <div class="offer-fields-row">
+            <div class="field">
+              <label>Valor da oferta</label>
+              <input id="fOfertaValor" type="number" min="0" step="0.01" placeholder="0,00" />
+            </div>
+
+            <div class="field">
+              <label>Observação da oferta</label>
+              <textarea id="fOfertaObs" rows="3" placeholder="Ex.: pacote principal + bônus + condição especial"></textarea>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <div class="modal-footer">
+      <div class="modal-left">
+        <a id="waBtn" class="wabtn" href="#" target="_blank" rel="noopener">
+          <i class="ph ph-whatsapp-logo"></i> WhatsApp
+        </a>
+      </div>
+
+      <div class="modal-right">
+        <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
+        <button class="btn danger" type="button" onclick="deleteFromModal()">
+          <i class="ph ph-trash"></i> Excluir
+        </button>
+        <button class="btn primary" type="button" onclick="saveModal()">
+          <i class="ph ph-floppy-disk"></i> Salvar
+        </button>
+      </div>
+    </div>
   </div>
+</div>
 
   <div id="handoffModalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
     <div class="modal" style="border: 2px solid var(--danger); z-index: 9999;">
