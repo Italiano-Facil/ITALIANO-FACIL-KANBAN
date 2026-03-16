@@ -76,7 +76,8 @@ if (!window.supabase || !window.supabase.createClient) {
     'A04',
     'Recall A04',
     'Link-Enviado',
-    'Parabéns'
+    'Parabéns',
+    'Desistência/Desqualificado'
   ],
   SLA: { warnMin: 30, dangerMin: 60 }
 };
@@ -378,9 +379,9 @@ function toggleView(){
 }
 /**METAS VENDEDORES**/
 const SELLER_GOALS = {
-  "Bruna": 30,
-  "Victoria": 25,
-  "Heloisa": 20,
+  "Bruna": 0,
+  "Victoria": 0,
+  "Heloisa": 0,
   "Marina": 0
 };
 
@@ -1876,6 +1877,7 @@ charts.funil = new Chart(document.getElementById('funilChart'), {
         'rgba(239,68,68,0.78)',   // Recall A04
         'rgba(34,197,94,0.88)',   // Link-Enviado
         'rgba(16,185,129,0.92)'   // Parabéns
+
       ],
       borderRadius: 12,
       borderSkipped: false,
@@ -3409,6 +3411,79 @@ function applyRoleUI() {
     VIEW = "performance";
   }
 }
+
+
+/*********************** PERFORMANCE — FILTRO DE MÊS ***********************/
+
+function getMonthFilterOptions() {
+  // Gera os últimos 6 meses no formato { value: "2025-03", label: "Março 2025" }
+  const opts = [];
+  const now = new Date();
+  const monthNames = [
+    "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"
+  ];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    opts.push({
+      value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`
+    });
+  }
+  return opts;
+}
+
+function populateMonthFilter() {
+  const sel = document.getElementById("performanceMonthFilter");
+  if (!sel || sel.dataset.populated) return;
+
+  const opts = getMonthFilterOptions();
+  sel.innerHTML = `<option value="">Mês atual</option>` +
+    opts.map(o => `<option value="${o.value}">${o.label}</option>`).join("");
+  sel.dataset.populated = "1";
+
+  if (!sel.dataset.bound) {
+    sel.addEventListener("change", () => renderPerformance());
+    sel.dataset.bound = "1";
+  }
+}
+
+// Filtra cards por mês selecionado (usa dataMudancaFluxo para "Parabéns", dataLead para os outros)
+function filterCardsByMonth(cards, monthValue) {
+  if (!monthValue) return cards; // sem filtro = mês atual real
+
+  const [year, month] = monthValue.split("-").map(Number);
+
+  return cards.filter(c => {
+    // Para conversões usa dataMudancaFluxo, para os demais usa dataLead
+    const dateStr = String(c.fluxo || "").toLowerCase() === "parabéns"
+      ? (c.dataMudancaFluxo || c.dataLead || "")
+      : (c.dataLead || "");
+
+    const d = parseBRDateToDate(dateStr);
+    if (!d) return false;
+    return d.getFullYear() === year && (d.getMonth() + 1) === month;
+  });
+}
+
+// Retorna dias no mês e dia atual para o mês filtrado
+function getMonthProgress(monthValue) {
+  if (!monthValue) {
+    const now = new Date();
+    const total = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const current = now.getDate();
+    return { current, total, pct: Math.round((current / total) * 100) };
+  }
+  const [year, month] = monthValue.split("-").map(Number);
+  const total = new Date(year, month, 0).getDate();
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && (now.getMonth() + 1) === month;
+  const current = isCurrentMonth ? now.getDate() : total;
+  return { current, total, pct: Math.round((current / total) * 100) };
+}
+
+/*********************** PERFORMANCE — CÁLCULO *****************************/
+
 function getSellerGoal(repName) {
   return Number(SELLER_GOALS[repName] || 0);
 }
@@ -3422,7 +3497,6 @@ function getAttentionStage(stageMap) {
     });
 
   if (!activeStages.length) return { stage: "—", count: 0, avgAgeSec: 0 };
-
   return {
     stage: activeStages[0][0],
     count: activeStages[0][1].count,
@@ -3430,9 +3504,8 @@ function getAttentionStage(stageMap) {
   };
 }
 
-function computeSellerPerformance() {
-  const cards = STATE.cards || [];
-
+function computeSellerPerformance(cardsOverride) {
+  const cards = cardsOverride || STATE.cards || [];
   const sellersMap = {};
 
   cards.forEach(card => {
@@ -3447,6 +3520,7 @@ function computeSellerPerformance() {
         stopped: 0,
         linkEnviado: 0,
         avgAgeSec: 0,
+        faturamento: 0,
         cards: [],
         stages: {}
       };
@@ -3458,18 +3532,14 @@ function computeSellerPerformance() {
     const stage = card.fluxo || "Inicial";
 
     if (!sellersMap[rep].stages[stage]) {
-      sellersMap[rep].stages[stage] = {
-        count: 0,
-        totalAgeSec: 0,
-        avgAgeSec: 0
-      };
+      sellersMap[rep].stages[stage] = { count: 0, totalAgeSec: 0, avgAgeSec: 0 };
     }
-
     sellersMap[rep].stages[stage].count++;
     sellersMap[rep].stages[stage].totalAgeSec += Number(card.ageSec || 0);
 
     if (String(stage).toLowerCase() === "parabéns") {
       sellersMap[rep].won++;
+      sellersMap[rep].faturamento += Number(card.ofertaValor || 0);
     } else {
       sellersMap[rep].active++;
     }
@@ -3512,14 +3582,12 @@ function computeSellerPerformance() {
   result.sort((a, b) => b.won - a.won || b.convRate - a.convRate);
   return result;
 }
-    function escapeHtml(s){
-      return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-    }
-    function getTeamAverageConversion() {
-  const perf = computeSellerPerformance().filter(s => s.rep !== "Sem dono");
-  if (!perf.length) return 0;
-  const sum = perf.reduce((acc, item) => acc + Number(item.convRate || 0), 0);
-  return Number((sum / perf.length).toFixed(1));
+
+function getTeamAverageConversion(perfList) {
+  const list = (perfList || computeSellerPerformance()).filter(s => s.rep !== "Sem dono");
+  if (!list.length) return 0;
+  const sum = list.reduce((acc, item) => acc + Number(item.convRate || 0), 0);
+  return Number((sum / list.length).toFixed(1));
 }
 
 function getPerformanceBadge(seller) {
@@ -3530,11 +3598,9 @@ function getPerformanceBadge(seller) {
   if (goalPct >= 100 || conv >= 25) {
     return { label: "Excelente", color: "#22c55e", bg: "rgba(34,197,94,.16)" };
   }
-
   if (stopped >= 5 || conv < 10) {
     return { label: "Crítico", color: "#ef4444", bg: "rgba(239,68,68,.16)" };
   }
-
   return { label: "Atenção", color: "#f59e0b", bg: "rgba(245,158,11,.16)" };
 }
 
@@ -3543,229 +3609,358 @@ function getGoalProgressWidth(goalPct) {
 }
 
 function buildMiniStageBars(seller) {
+  const STAGE_COLORS = {
+    "Parabéns": "#22c55e",
+    "Link-Enviado": "#3b82f6",
+    "A04": "#ef4444",
+    "A03": "#f59e0b",
+    "A02": "#a78bfa",
+    "Recall A04": "#dc2626",
+    "Recall A03": "#d97706",
+    "Recall A02": "#7c3aed",
+    "Inicial": "#64748b",
+    "Desistência/Desqualificado": "#dc2626"
+  };
+
   const orderedStages = Object.entries(seller.stages || {})
     .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 5);
+    .slice(0, 6);
 
   if (!orderedStages.length) {
     return `<div style="color:var(--muted); font-size:12px;">Sem dados de etapas</div>`;
   }
 
-  return orderedStages.map(([stage, info]) => `
-    <div style="margin-bottom:8px;">
-      <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:4px; font-size:12px; font-weight:800;">
-        <span>${escapeHtml(stage)}</span>
-        <span>${info.percent}%</span>
+  const max = orderedStages[0][1].percent;
+
+  return orderedStages.map(([stage, info]) => {
+    const color = STAGE_COLORS[stage] || "#64748b";
+    const relWidth = max > 0 ? Math.round((info.percent / max) * 100) : 0;
+    return `
+      <div style="margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:5px;">
+          <div style="display:flex; align-items:center; gap:7px; min-width:0;">
+            <span style="width:8px; height:8px; border-radius:50%; background:${color}; flex-shrink:0; display:inline-block;"></span>
+            <span style="font-size:12px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(stage)}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <span style="font-size:11px; color:var(--muted); font-weight:700;">${info.count} leads</span>
+            <span style="font-size:12px; font-weight:900; min-width:36px; text-align:right;">${info.percent}%</span>
+          </div>
+        </div>
+        <div style="height:6px; border-radius:999px; background:rgba(255,255,255,.07); overflow:hidden;">
+          <div style="height:100%; width:${relWidth}%; background:${color}; border-radius:999px; opacity:.85; transition:width .4s ease;"></div>
+        </div>
       </div>
-      <div style="height:8px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden;">
-        <div style="height:100%; width:${Math.max(0, Math.min(100, info.percent))}%; background:linear-gradient(90deg, rgba(59,130,246,.9), rgba(34,197,94,.9)); border-radius:999px;"></div>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
+
+/*********************** PERFORMANCE — RENDER ******************************/
+
 function renderPerformance() {
   const wrap = document.getElementById("performanceWrap");
-  const filter = document.getElementById("performanceSellerFilter");
+  const filterSeller = document.getElementById("performanceSellerFilter");
+  const filterMonth  = document.getElementById("performanceMonthFilter");
   if (!wrap) return;
 
-  let sellers = computeSellerPerformance().filter(s => s.rep !== "Sem dono");
+  populateMonthFilter();
 
+  const monthValue = filterMonth?.value || "";
+  const mp = getMonthProgress(monthValue);
+  const monthPct = mp.total > 0 ? Math.round((mp.current / mp.total) * 100) : 0;
+
+  // Popula filtro de vendedor
+  const allPerf = computeSellerPerformance().filter(s => s.rep !== "Sem dono");
+  if (filterSeller) {
+    const cur = filterSeller.value || "";
+    filterSeller.innerHTML = `<option value="">Todos os vendedores</option>` +
+      allPerf.map(s => s.rep).sort().map(n =>
+        `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`
+      ).join("");
+    filterSeller.value = cur;
+    filterSeller.disabled = !AUTH.isAdmin;
+    if (!filterSeller.dataset.bound) {
+      filterSeller.addEventListener("change", () => renderPerformance());
+      filterSeller.dataset.bound = "1";
+    }
+  }
+
+  // Define vendedores a exibir
+  let names = allPerf.map(s => s.rep);
   if (!AUTH.isAdmin && AUTH.atendente) {
     const myName = AUTH.atendente.manychat_name || AUTH.atendente.nome || "";
-    sellers = sellers.filter(s => s.rep === myName);
+    names = names.filter(n => n === myName);
+  } else if (AUTH.isAdmin && filterSeller?.value) {
+    names = names.filter(n => n === filterSeller.value);
   }
 
-  if (filter) {
-    const current = filter.value || "";
-    const options = computeSellerPerformance()
-      .filter(s => s.rep !== "Sem dono")
-      .map(s => s.rep)
-      .filter(Boolean)
-      .sort();
-
-    filter.innerHTML = `
-      <option value="">Todos os vendedores</option>
-      ${options.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
-    `;
-
-    filter.value = current;
-    filter.disabled = !AUTH.isAdmin;
-
-    if (!filter.dataset.bound) {
-      filter.addEventListener("change", () => renderPerformance());
-      filter.dataset.bound = "1";
-    }
-
-    if (AUTH.isAdmin && filter.value) {
-      sellers = sellers.filter(s => s.rep === filter.value);
-    }
-  }
-
-  if (!sellers.length) {
-    wrap.innerHTML = `
-      <div style="color:var(--muted); font-weight:900; padding:14px;">
-        Nenhum dado de desempenho encontrado.
-      </div>
-    `;
+  if (!names.length) {
+    wrap.innerHTML = `<div style="color:var(--muted);font-weight:900;padding:14px;">Nenhum dado encontrado.</div>`;
     return;
   }
 
-  const teamAvg = getTeamAverageConversion();
+  // Vendedor selecionado (persiste entre re-renders)
+  if (!window._perfSeller || !names.includes(window._perfSeller)) {
+    window._perfSeller = names[0];
+  }
 
-  wrap.innerHTML = sellers.map(seller => {
-    const badge = getPerformanceBadge(seller);
-    const progressWidth = getGoalProgressWidth(seller.goalPct);
-    const isAboveTeam = Number(seller.convRate || 0) >= teamAvg;
-    const diffTeam = Number((Number(seller.convRate || 0) - teamAvg).toFixed(1));
+  // Tabs de seleção de vendedor
+  const tabsHtml = names.map(n => `
+    <button onclick="window._selectPerfSeller('${n.replace(/'/g,"\\'")}','${monthValue}')"
+      style="padding:7px 18px;border-radius:999px;border:1px solid ${n===window._perfSeller?"rgba(59,130,246,.5)":"rgba(255,255,255,.1)"};
+             background:${n===window._perfSeller?"rgba(59,130,246,.15)":"rgba(255,255,255,.04)"};
+             color:${n===window._perfSeller?"#60a5fa":"var(--muted)"};
+             font-size:13px;font-weight:900;cursor:pointer;transition:.15s;">
+      ${escapeHtml(n)}
+    </button>`).join("");
 
-const stagesHtml = Object.entries(seller.stages)
-  .sort((a, b) => b[1].count - a[1].count)
-  .map(([stage, info]) => {
-    const pct = Math.max(0, Math.min(100, Number(info.percent || 0)));
+  window._selectPerfSeller = function(name, mv) {
+    window._perfSeller = name;
+    renderPerformance();
+  };
 
-    let stageTone = "neutral";
-    const stageLower = String(stage).toLowerCase();
+  const repName = window._perfSeller;
+  const allCards = STATE.cards || [];
+  const cardsMes = monthValue ? filterCardsByMonth(allCards, monthValue) : allCards;
+  const cards = cardsMes.filter(c => c.responsavel === repName);
 
-    if (stageLower.includes("recall")) stageTone = "warn";
-    else if (stageLower === "parabéns") stageTone = "success";
-    else if (stageLower === "link-enviado") stageTone = "info";
+  // Cálculos
+  const total   = cards.length;
+  const won     = cards.filter(c => String(c.fluxo||"").toLowerCase() === "parabéns").length;
+  const conv    = total ? Number(((won/total)*100).toFixed(1)) : 0;
+  const stopped = cards.filter(c => Number(c.ageSec||0) >= THREE_DAYS_SEC && String(c.fluxo||"").toLowerCase() !== "parabéns").length;
+  const links   = cards.filter(c => String(c.fluxo||"").toLowerCase() === "link-enviado").length;
+  const fat     = cards.filter(c => String(c.fluxo||"").toLowerCase() === "parabéns")
+                       .reduce((s,c) => s + Number(c.ofertaValor||0), 0);
+  const goal    = getSellerGoal(repName);
+  const goalPct = goal > 0 ? Math.min(100, Math.round((won/goal)*100)) : 0;
+  const ritmo   = mp.current > 0 ? Math.round((won/mp.current)*mp.total) : 0;
 
+  // Histórico total
+  const allTime = allCards.filter(c => c.responsavel === repName);
+  const wonAll  = allTime.filter(c => String(c.fluxo||"").toLowerCase() === "parabéns").length;
+  const convAll = allTime.length ? Number(((wonAll/allTime.length)*100).toFixed(1)) : 0;
+
+  // Recorrência
+  const phones = {};
+  allTime.forEach(c => {
+    const p = String(c.phone||"").replace(/\D/g,"");
+    if (p.length >= 10) phones[p] = (phones[p]||0) + 1;
+  });
+  const recorr = allTime.length
+    ? Number(((Object.values(phones).filter(n => n > 1).length / allTime.length)*100).toFixed(1))
+    : 0;
+
+  // Etapas
+  const stagesMap = {};
+  cards.forEach(c => { const s = c.fluxo||"Inicial"; stagesMap[s] = (stagesMap[s]||0)+1; });
+  const stagesArr = Object.entries(stagesMap).sort((a,b) => b[1]-a[1]);
+  const maxS = stagesArr[0]?.[1] || 1;
+
+  const STAGE_CLR = {
+    "Parabéns":"#22c55e","Link-Enviado":"#3b82f6","A04":"#ef4444",
+    "A03":"#f59e0b","A02":"#a78bfa","Recall A04":"#dc2626",
+  "Recall A03":"#d97706","Recall A02":"#7c3aed","Inicial":"#64748b", "Desistência/Desqualificado": "#ef4444"
+  };
+  const AV_PAL = [
+    {bg:"rgba(219,234,254,.2)",border:"rgba(147,197,253,.5)",col:"#60a5fa"},
+    {bg:"rgba(220,252,231,.2)",border:"rgba(134,239,172,.5)",col:"#4ade80"},
+    {bg:"rgba(252,231,243,.2)",border:"rgba(249,168,212,.5)",col:"#f0abfc"},
+    {bg:"rgba(254,243,199,.2)",border:"rgba(252,211,77,.5)", col:"#fbbf24"},
+    {bg:"rgba(237,233,254,.2)",border:"rgba(167,139,250,.5)",col:"#a78bfa"},
+    {bg:"rgba(204,251,241,.2)",border:"rgba(45,212,191,.5)", col:"#2dd4bf"}
+  ];
+
+  const avIdx = names.indexOf(repName) % AV_PAL.length;
+  const av = AV_PAL[avIdx];
+  const initials = repName.split(" ").map(p=>p[0]).slice(0,2).join("").toUpperCase();
+
+  // Badge + Status
+  let bLabel, bBg, bCol;
+  if (goalPct>=100||conv>=22){bLabel="Excelente";bBg="rgba(34,197,94,.15)";bCol="#22c55e";}
+  else if (conv>=13){bLabel="Atenção";bBg="rgba(245,158,11,.15)";bCol="#f59e0b";}
+  else{bLabel="Crítico";bBg="rgba(239,68,68,.15)";bCol="#ef4444";}
+
+  let stIcon,stTxt,stBg,stCol,stBorder;
+  if (goal>0&&won>=goal){stIcon="🏆";stTxt="Batendo records";stBg="rgba(34,197,94,.1)";stCol="#22c55e";stBorder="rgba(34,197,94,.3)";}
+  else if (conv>=20){stIcon="🚀";stTxt="Correndo atrás";stBg="rgba(59,130,246,.1)";stCol="#60a5fa";stBorder="rgba(59,130,246,.3)";}
+  else if (stopped>8){stIcon="⚠️";stTxt="Atenção necessária";stBg="rgba(245,158,11,.1)";stCol="#f59e0b";stBorder="rgba(245,158,11,.3)";}
+  else if (conv<10){stIcon="🆘";stTxt="Precisa de apoio";stBg="rgba(239,68,68,.1)";stCol="#ef4444";stBorder="rgba(239,68,68,.3)";}
+  else{stIcon="✓";stTxt="Mantendo";stBg="rgba(99,102,241,.1)";stCol="#a78bfa";stBorder="rgba(99,102,241,.3)";}
+
+  // Goal bar color
+  let gFill,gBg,gCol;
+  if(goalPct>=100){gFill="#22c55e";gBg="rgba(34,197,94,.15)";gCol="#22c55e";}
+  else if(goalPct>=60){gFill="#f59e0b";gBg="rgba(245,158,11,.15)";gCol="#f59e0b";}
+  else{gFill="#ef4444";gBg="rgba(239,68,68,.15)";gCol="#ef4444";}
+
+  const mlabel = (() => {
+    if(!monthValue){const n=new Date();const names_=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];return`${names_[n.getMonth()]} ${n.getFullYear()}`;}
+    return getMonthFilterOptions().find(o=>o.value===monthValue)?.label||monthValue;
+  })();
+
+  const stagesHtml = stagesArr.map(([s2,cnt]) => {
+    const w = Math.round((cnt/maxS)*100);
+    const sc = STAGE_CLR[s2]||"#64748b";
+    const p2 = total ? Math.round((cnt/total)*100) : 0;
     return `
-      <div class="stage-row ${stageTone}">
-        <div class="stage-row-top">
-          <div class="stage-name-wrap">
-            <span class="stage-dot"></span>
-            <span class="stage-name">${escapeHtml(stage)}</span>
-          </div>
-          <div class="stage-percent">${pct}%</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;">
+        <div style="display:flex;align-items:center;gap:6px;width:130px;flex-shrink:0;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${sc};flex-shrink:0;display:inline-block;"></span>
+          <span style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s2)}</span>
         </div>
-
-        <div class="stage-bar">
-          <div class="stage-bar-fill" style="width:${pct}%"></div>
+        <div style="flex:1;height:6px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;">
+          <div style="height:100%;width:${w}%;background:${sc};opacity:.85;border-radius:999px;transition:width .35s;"></div>
         </div>
-
-        <div class="stage-meta-line">
-          <span>${info.count} leads</span>
-          <span>Média: ${formatHMS(info.avgAgeSec)}</span>
-        </div>
-      </div>
-    `;
+        <span style="font-size:11px;color:var(--muted);width:52px;text-align:right;flex-shrink:0;">${cnt} (${p2}%)</span>
+      </div>`;
   }).join("");
 
-    return `
-      <div class="chart-card" style="margin-bottom:14px;">
-        <div class="chart-title" style="align-items:flex-start; gap:12px; flex-wrap:wrap;">
-          <div class="left">
-            <i class="ph ph-user-circle"></i> ${escapeHtml(seller.rep)}
-          </div>
+  const histRows = [
+    ["Total de leads",       total],
+    ["Conversão no mês",     conv+"%"],
+    ["Compras no mês",       won],
+    ["Conv. histórica",      convAll+"%"],
+    ["Total histórico",      allTime.length+" leads"],
+    ["Recorrência",          recorr+"%"],
+    ["Meta mensal",          goal>0?goal:"Não definida"],
+    ["Faturamento",          fat>0?"R$ "+fat.toLocaleString("pt-BR",{minimumFractionDigits:2}):"—"],
+  ].map(([k,v])=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px;">
+      <span style="color:var(--muted);font-weight:800;">${k}</span>
+      <span style="font-weight:900;">${v}</span>
+    </div>`).join("");
 
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <div class="pill">Conversão: ${seller.convRate}%</div>
-            <div style="
-              padding:8px 12px;
-              border-radius:999px;
-              font-size:12px;
-              font-weight:900;
-              color:${badge.color};
-              background:${badge.bg};
-              border:1px solid ${badge.color}33;
-            ">
-              ${badge.label}
-            </div>
-          </div>
+  wrap.innerHTML = `
+    <div class="chart-card" style="padding:0;overflow:hidden;border-radius:22px;margin-bottom:4px;">
+
+      <!-- TABS DE VENDEDOR -->
+      <div style="padding:14px 18px 0;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.07);padding-bottom:14px;">
+        ${tabsHtml}
+        <div style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:800;align-self:center;">
+          Dia ${mp.current} de ${mp.total} · ${monthPct}% do mês
         </div>
-
-        <div style="margin:10px 0 16px 0;">
-          <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; font-size:12px; font-weight:900;">
-            <span>Progresso da meta mensal</span>
-            <span>${seller.goal > 0 ? `${seller.won}/${seller.goal} • ${seller.goalPct}%` : "Meta não definida"}</span>
-          </div>
-          <div style="height:12px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden;">
-            <div style="
-              height:100%;
-              width:${progressWidth}%;
-              background:linear-gradient(90deg, #3b82f6 0%, #22c55e 100%);
-              border-radius:999px;
-              transition:width .35s ease;
-            "></div>
-          </div>
-        </div>
-
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px;">
-          <div style="padding:12px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase;">Total de leads</div>
-            <div style="font-size:22px; font-weight:900; margin-top:6px;">${seller.total}</div>
-          </div>
-
-          <div style="padding:12px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase;">Compras</div>
-            <div style="font-size:22px; font-weight:900; margin-top:6px;">${seller.won}</div>
-          </div>
-
-          <div style="padding:12px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase;">Leads ativos</div>
-            <div style="font-size:22px; font-weight:900; margin-top:6px;">${seller.active}</div>
-          </div>
-
-          <div style="padding:12px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase;">Parados +3 dias</div>
-            <div style="font-size:22px; font-weight:900; margin-top:6px;">${seller.stopped}</div>
-          </div>
-
-          <div style="padding:12px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase;">Etapa que pede atenção</div>
-            <div style="font-size:18px; font-weight:900; margin-top:6px;">${escapeHtml(seller.attentionStage)}</div>
-            <div style="margin-top:4px; color:var(--muted); font-size:12px;">
-              ${seller.attentionStageCount} leads • média ${formatHMS(seller.attentionStageAvgAgeSec)}
-            </div>
-          </div>
-
-          <div style="padding:12px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase;">Comparação com equipe</div>
-            <div style="font-size:18px; font-weight:900; margin-top:6px;">
-              ${isAboveTeam ? "Acima da média" : "Abaixo da média"}
-            </div>
-            <div style="margin-top:4px; color:${isAboveTeam ? "#22c55e" : "#ef4444"}; font-size:12px; font-weight:900;">
-              ${diffTeam >= 0 ? "+" : ""}${diffTeam}% vs média geral (${teamAvg}%)
-            </div>
-          </div>
-        </div>
-
-        <div style="display:grid; grid-template-columns:1.2fr .8fr; gap:14px; margin-bottom:14px;">
-          <div style="padding:14px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="margin-bottom:10px; color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.6px; text-transform:uppercase;">
-              Mini gráfico por etapa
-            </div>
-            ${buildMiniStageBars(seller)}
-          </div>
-
-          <div style="padding:14px; border:1px solid var(--border-light); border-radius:16px; background:rgba(255,255,255,.03);">
-            <div style="margin-bottom:10px; color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.6px; text-transform:uppercase;">
-              Resumo rápido
-            </div>
-            <div style="display:grid; gap:8px; font-size:13px; font-weight:800;">
-              <div>Conversão: <span style="color:#fff;">${seller.convRate}%</span></div>
-              <div>Links enviados: <span style="color:#fff;">${seller.linkEnviado}</span></div>
-              <div>Tempo médio ativo: <span style="color:#fff;">${formatHMS(seller.avgAgeSec)}</span></div>
-              <div>Meta mensal: <span style="color:#fff;">${seller.goal || "—"}</span></div>
-            </div>
-          </div>
-        </div>
-
-<div class="stage-distribution-block">
-  <div class="stage-distribution-header">
-    <div class="stage-distribution-title">Distribuição dos leads por etapa</div>
-    <div class="stage-distribution-subtitle">Visão percentual da carteira deste vendedor</div>
-  </div>
-
-  <div class="stage-distribution-list">
-    ${stagesHtml || `<div style="color:var(--muted);">Sem etapas</div>`}
-  </div>
-</div>
       </div>
-    `;
-  }).join("");
+
+      <!-- PERFIL HERO -->
+      <div style="padding:20px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+        <div style="width:68px;height:68px;border-radius:50%;flex-shrink:0;background:${av.bg};color:${av.col};border:2.5px solid ${av.border};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;">${initials}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <span style="font-size:20px;font-weight:900;letter-spacing:-.3px;">${escapeHtml(repName)}</span>
+            <span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:900;background:${bBg};color:${bCol}">${bLabel}</span>
+            <span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:900;background:${stBg};color:${stCol};border:1px solid ${stBorder};">${stIcon} ${stTxt}</span>
+          </div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;font-weight:800;color:var(--muted);">
+            <span>Nº total de leads: <b style="color:var(--text)">${allTime.length}</b></span>
+            <span>Conv. total: <b style="color:var(--text)">${convAll}%</b></span>
+            <span>Tx. recorrência: <b style="color:var(--text)">${recorr}%</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:0.5px;background:rgba(255,255,255,.07);margin:0 22px;"></div>
+
+      <!-- META DO MÊS -->
+      <div style="padding:16px 22px;">
+        <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px;">Meta do mês · ${mlabel}</div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Compras realizadas</div>
+              <div style="font-size:30px;font-weight:900;line-height:1;">${won}<span style="font-size:16px;color:var(--muted);font-weight:700;"> / ${goal>0?goal:"—"}</span></div>
+            </div>
+            ${goal>0?`<div style="padding:6px 14px;border-radius:999px;font-size:14px;font-weight:900;background:${gBg};color:${gCol}">${goalPct}% da meta</div>`:`<span style="font-size:12px;color:var(--muted);">Sem meta definida</span>`}
+          </div>
+          ${goal>0?`<div style="height:10px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;"><div style="height:100%;width:${goalPct}%;background:${gFill};border-radius:999px;transition:width .45s;"></div></div>`:""}
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:12px;font-weight:800;color:var(--muted);">
+            <span>Faturamento mensal: <b style="color:var(--text);">${fat>0?"R$ "+fat.toLocaleString("pt-BR",{minimumFractionDigits:2}):"—"}</b></span>
+            ${ritmo>0&&goal>0?`<span>Projeção: <b style="color:var(--text);">${ritmo} compras</b></span>`:""}
+          </div>
+        </div>
+      </div>
+
+      <div style="height:0.5px;background:rgba(255,255,255,.07);margin:0 22px;"></div>
+
+      <!-- DESEMPENHO NO MÊS -->
+      <div style="padding:16px 22px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);">Desempenho · ${mp.current} dias do mês</div>
+          <span style="font-size:11px;color:var(--muted);font-weight:800;">${monthPct}% percorrido</span>
+        </div>
+        <div style="height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin-bottom:12px;">
+          <div style="height:100%;width:${monthPct}%;background:rgba(59,130,246,.6);border-radius:999px;"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;">
+          ${[
+            {v:total,       l:"Nº de leads"},
+            {v:won,         l:"Compras"},
+            {v:conv+"%",    l:"Conversão"},
+            {v:stopped,     l:"Parados +3d"},
+            {v:links,       l:"Links enviados"},
+            {v:mp.current+"d", l:"Dias trabalhados"}
+          ].map(k=>`
+            <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:10px 12px;">
+              <div style="font-size:20px;font-weight:900;line-height:1;">${k.v}</div>
+              <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-top:5px;">${k.l}</div>
+            </div>`).join("")}
+        </div>
+      </div>
+
+      <div style="height:0.5px;background:rgba(255,255,255,.07);margin:0 22px;"></div>
+
+      <!-- STATUS + PIX + COMISSÃO -->
+      <div style="padding:16px 22px;">
+        <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px;">Status · comissão e pix</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">
+          ${[
+            {icon:stIcon, v:stTxt,    l:"Status",           bg:stBg,                        col:stCol,    border:stBorder},
+            {icon:"📈",   v:ritmo>0?ritmo+" compras":"—",   l:"Projeção fim mês",bg:"rgba(255,255,255,.03)",col:"var(--text)",border:"rgba(255,255,255,.07)"},
+            {icon:"🏅",   v:won>=(goal>0?goal:Infinity)?"Sim ✓":"—", l:"Batendo records",bg:won>=(goal>0?goal:Infinity)?"rgba(234,179,8,.1)":"rgba(255,255,255,.03)",col:won>=(goal>0?goal:Infinity)?"#fbbf24":"var(--muted)",border:won>=(goal>0?goal:Infinity)?"rgba(234,179,8,.3)":"rgba(255,255,255,.07)"},
+            {icon:"🔄",   v:stopped,  l:"Leads parados",    bg:"rgba(255,255,255,.03)",col:"var(--text)",border:"rgba(255,255,255,.07)"},
+            {icon:"🕐",   v:(mp.total-mp.current)+"d",l:"Dias restantes",bg:"rgba(255,255,255,.03)",col:"var(--text)",border:"rgba(255,255,255,.07)"}
+          ].map(b=>`
+            <div style="padding:12px 14px;border-radius:16px;border:1px solid ${b.border};background:${b.bg};display:flex;flex-direction:column;gap:5px;">
+              <div style="font-size:16px;">${b.icon}</div>
+              <div style="font-size:15px;font-weight:900;color:${b.col};line-height:1.1;">${b.v}</div>
+              <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);">${b.l}</div>
+            </div>`).join("")}
+        </div>
+      </div>
+
+      <div style="height:0.5px;background:rgba(255,255,255,.07);margin:0 22px;"></div>
+
+      <!-- HISTÓRICO + FAZENDO HISTÓRICO -->
+      <div style="padding:16px 22px;">
+        <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px;">Histórico · comparação · fazendo história</div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:18px;overflow:hidden;">
+          ${histRows}
+        </div>
+      </div>
+
+      <div style="height:0.5px;background:rgba(255,255,255,.07);margin:0 22px;"></div>
+
+      <!-- ETAPAS -->
+      <div style="padding:16px 22px 20px;">
+        <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px;">Distribuição por etapas</div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:14px 16px;">
+          ${stagesHtml||`<div style="color:var(--muted);">Sem dados no período</div>`}
+        </div>
+      </div>
+
+    </div>
+  `;
 }
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+
+
+
+
+
+
+
     function buildWaLink(phone){
       let s = String(phone || '').replace(/\D/g,'');
       if(!s || s.length < 10) return '';
@@ -4105,4 +4300,5 @@ window.renderPvSend = renderPvSend;
 window.pvCreateAndSendLead = pvCreateAndSendLead;
 window.clearPvSendForm = clearPvSendForm;
 window.generateReport = generateReport;
+window.renderPerformance = renderPerformance;
 window.renderPerformance = renderPerformance;
