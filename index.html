@@ -182,6 +182,7 @@
             <option value="A04">A04</option>
             <option value="Recall A04">Recall A04</option>
             <option value="Link-Enviado">Link-Enviado</option>
+            <option value="Desistência/Desqualificado">Desistência/Desqualificado</option>
           </select>
 
           <input id="pvMotivo" class="input" style="min-width:320px; flex:1;" placeholder="Observação rápida (o que a pessoa quer?)" />
@@ -212,6 +213,7 @@
             <option value="A04">A04</option>
             <option value="Recall A04">Recall A04</option>
             <option value="Link-Enviado">Link-Enviado</option>
+             <option value="Desistência/Desqualificado">Desistência/Desqualificado</option>
           </select>
           <button class="btn primary" type="button" onclick="renderPreVendas()">
             <i class="ph ph-arrows-clockwise"></i> Atualizar
@@ -251,6 +253,7 @@
         <option value="A04">A04</option>
         <option value="Recall A04">Recall A04</option>
         <option value="Link-Enviado">Link-Enviado</option>
+         <option value="Desistência/Desqualificado">Desistência/Desqualificado</option>
       </select>
 
       <select id="pvSendPara" class="input">
@@ -314,25 +317,26 @@
         <div id="unassignedWrap"></div>
       </div>
     </main>
-    <main id="performance" class="page hidden">
-  <div class="chart-card">
-    <div class="chart-title">
+<main id="performance" class="page hidden">
+  <div class="chart-card" style="margin-bottom:12px;">
+    <div class="chart-title" style="flex-wrap:wrap;gap:10px;">
       <div class="left">
-        <i class="ph ph-user-circle-gear"></i> Desempenho Individual por Vendedor
+        <i class="ph ph-user-circle-gear"></i> Desempenho Individual
       </div>
-      <button class="btn primary" type="button" onclick="renderPerformance()">
-        <i class="ph ph-arrows-clockwise"></i> Atualizar
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="performanceSellerFilter" class="input" style="width:200px;">
+          <option value="">Todos os vendedores</option>
+        </select>
+        <select id="performanceMonthFilter" class="input" style="width:170px;">
+          <option value="">Mês atual</option>
+        </select>
+        <button class="btn primary" type="button" onclick="renderPerformance()">
+          <i class="ph ph-arrows-clockwise"></i>
+        </button>
+      </div>
     </div>
-
-    <div style="margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap;">
-      <select id="performanceSellerFilter" class="input" style="width:260px;">
-        <option value="">Todos os vendedores</option>
-      </select>
-    </div>
-
-    <div id="performanceWrap"></div>
   </div>
+  <div id="performanceWrap"></div>
 </main>
         <main id="dashboard" class="dashboard hidden">
           <div class="chart-card">
@@ -598,6 +602,7 @@
           <option value="Recall A04">Recall A04</option>
           <option value="Link-Enviado">Link-Enviado</option>
           <option value="Parabéns">Parabéns</option>
+           <option value="Desistência/Desqualificado">Desistência/Desqualificado</option>
         </select>
       </div>
 
