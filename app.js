@@ -195,8 +195,17 @@ async function renderPreVendas(){
     .filter(c => !PV.stage || String(c.fluxo) === String(PV.stage))
     .filter(c => {
       if(!PV.search) return true;
-      const hay = `${c.name||""} ${c.phone||""} ${c.origem||""} ${c.fluxo||""}`.toLowerCase();
-      return hay.includes(PV.search);
+const search = normalizePhone(PV.search || "");
+
+const hay = `${c.name||""} ${c.phone||""} ${c.origem||""} ${c.fluxo||""}`.toLowerCase();
+const phone = normalizePhone(c.phone);
+
+const searchText = (PV.search || "").toLowerCase();
+
+return (
+  hay.includes(searchText) ||
+  phone.includes(search)
+);
     })
     .sort((a,b)=> b.ageSec - a.ageSec);
 
@@ -1560,13 +1569,19 @@ async function updateCardFields(id, fields){
         const cardsInStage = (STATE.cards || [])
           .filter(c => c.fluxo === stage)
           .filter(c => {
-            const matchSearch = (!SEARCH_QUERY ||
-              (c.name || "").toLowerCase().includes(SEARCH_QUERY) ||
-              (c.responsavel || "").toLowerCase().includes(SEARCH_QUERY) ||
-              (c.origem || "").toLowerCase().includes(SEARCH_QUERY)
-            );
+const searchText = (SEARCH_QUERY || "").toLowerCase();
+const searchPhone = normalizePhone(SEARCH_QUERY || "");
+
+const matchSearch = (!SEARCH_QUERY ||
+  (c.name || "").toLowerCase().includes(searchText) ||
+  (c.responsavel || "").toLowerCase().includes(searchText) ||
+  (c.origem || "").toLowerCase().includes(searchText) ||
+  normalizePhone(c.phone).includes(searchPhone)
+);
             const matchResp = (!FILTER_RESP || c.responsavel === FILTER_RESP);
             const matchOrig = (!FILTER_ORIG || c.origem === FILTER_ORIG);
+            const phone = normalizePhone(c.phone);
+const search = normalizePhone(SEARCH_QUERY || "");
             return matchSearch && matchResp && matchOrig;
           })
           .sort((a,b) => b.sortTs - a.sortTs);
@@ -4243,6 +4258,9 @@ function renderPerformance() {
   } catch (err) {
     console.error("Falha ao gravar audit log:", err);
   }
+}
+function normalizePhone(phone) {
+  return String(phone || "").replace(/\D/g, "");
 }
 
 // ===== EXPOSE FUNCTIONS TO HTML (onclick / ondrop etc) =====
